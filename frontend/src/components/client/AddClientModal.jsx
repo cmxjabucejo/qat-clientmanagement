@@ -37,12 +37,15 @@ const INITIAL_FORM_DATA = {
   notes: "",
   termDate: "",
   site: "",
-  workSetup: "", // ✅ NEW
+  workSetup: "",
+  specialInstructions: "",
+  attachments: [],
 };
 
 const AddClientModal = ({ isOpen, onClose, onSave }) => {
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [saving, setSaving] = useState(false);
+  const [files, setFiles] = useState([]);
 
   // "idle" | "success" | "error"
   const [submitStatus, setSubmitStatus] = useState("idle");
@@ -52,6 +55,7 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
   useEffect(() => {
     if (isOpen) {
       setFormData(INITIAL_FORM_DATA);
+      setFiles([]);
       setSaving(false);
       setSubmitStatus("idle");
       setSubmitMessage("");
@@ -85,6 +89,19 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
       ...(name === "account" && { qbAccount: value }),
     }));
   };
+
+  useEffect(() => {
+    setFormData((prev) => {
+      let updated = { ...prev };
+
+      // If NOT Discontinued → clear termDate
+      if (prev.status !== "Discontinued") {
+        updated.termDate = "";
+      }
+
+      return updated;
+    });
+  }, [formData.status]);
 
   // Basic required-fields validation (for Save button + submit)
   const validateRequired = (data) => {
@@ -130,14 +147,27 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
     setSubmitMessage("");
 
     try {
+      const formPayload = new FormData();
+
+      // append all fields
+      Object.keys(formData).forEach((key) => {
+        if (key !== "attachments") {
+          formPayload.append(key, formData[key]);
+        }
+      });
+
+      // append files
+      files.forEach((file) => {
+        formPayload.append("attachments", file);
+      });
+
+      // user info
+      formPayload.append("userFirstName", localStorage.getItem("userFirstname"));
+      formPayload.append("userLastName", localStorage.getItem("userLastname"));
+
       const res = await fetch(`${SERVER_URL}/api/client-roster`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          userFirstName: localStorage.getItem("userFirstname"),
-          userLastName: localStorage.getItem("userLastname"),
-        }),
+        body: formPayload, // ❗ no JSON headers
       });
 
       const data = await res.json();
@@ -173,6 +203,27 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
       setSubmitStatus("idle");
       setSubmitMessage("");
     }
+  };
+
+  const handleFileChange = (e) => {
+    const selectedFiles = Array.from(e.target.files);
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    const validFiles = selectedFiles.filter((file) => {
+      if (file.size > maxSize) {
+        setSubmitStatus("error");
+        setSubmitMessage(`${file.name} exceeds 5MB`);
+        return false;
+      }
+      return true;
+    });
+
+    const uniqueFiles = validFiles.filter(
+      (file) => !files.some((f) => f.name === file.name)
+    );
+
+    setFiles((prev) => [...prev, ...uniqueFiles]);
   };
 
   if (!isOpen) return null;
@@ -264,14 +315,16 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
 
             <div>
               <label className="block text-[11px] font-medium text-gray-600">
-                Live Date <span className="text-red-500">*</span>
+                Live Date {formData.status === "Active" && (
+                  <span className="text-red-500">*</span>
+                )}
               </label>
               <input
                 type="date"
                 name="liveDate"
                 value={formData.liveDate || ""}
                 onChange={handleInputChange}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                className={`mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs`}
               />
             </div>
 
@@ -284,7 +337,12 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
                 name="termDate"
                 value={formData.termDate || ""}
                 onChange={handleInputChange}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+                disabled={formData.status !== "Discontinued"}
+                className={`mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs ${
+                  formData.status !== "Discontinued"
+                    ? "bg-gray-100 cursor-not-allowed"
+                    : ""
+                }`}
               />
             </div>
 
@@ -779,18 +837,72 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
             </div>
           </div>
 
-          {/* Notes */}
+          {/* Special Instructions + Notes */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Special Instructions */}
+            <div>
+              <label className="block text-[11px] font-medium text-gray-600">
+                Special Instructions
+              </label>
+              <textarea
+                name="specialInstructions"
+                rows={4}
+                value={formData.specialInstructions || ""}
+                onChange={handleInputChange}
+                className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-[11px] font-medium text-gray-600">
+                Notes
+              </label>
+              <textarea
+                name="notes"
+                rows={4}
+                value={formData.notes}
+                onChange={handleInputChange}
+                className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Attachments */}
           <div>
             <label className="block text-[11px] font-medium text-gray-600">
-              Notes
+              Attachments
             </label>
-            <textarea
-              name="notes"
-              rows={4}
-              value={formData.notes}
-              onChange={handleInputChange}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs"
+
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xlsx"
+              onChange={handleFileChange}
+              className="mt-1 w-full text-xs"
             />
+              {files.length > 0 && (
+                <ul className="mt-2 text-[11px] text-gray-600 space-y-1">
+                  {files.map((file, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded"
+                    >
+                      <span className="truncate">📎 {file.name}</span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiles((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="text-red-500 text-[10px] hover:underline ml-2"
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
           </div>
 
           {/* Footer buttons */}

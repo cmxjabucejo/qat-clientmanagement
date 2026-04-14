@@ -182,89 +182,148 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-auto text-xs space-y-3">
-        {/* PROFILE TAB */}
-        {activeTab === "Profile" && (
-          <div className="space-y-4">
-            {/* Business Address */}
-            <div>
-              <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                Business Address
-              </p>
-              <p className="mt-1 text-gray-800 whitespace-pre-line">
-                {client.BUSADDRESS || "No address on file"}
-                {client.STATE && `\n${client.STATE}`}
-              </p>
-            </div>
+      {/* PROFILE TAB */}
+      {activeTab === "Profile" && (
+        <div className="space-y-4">
 
-            {/* Contacts */}
-            <div>
-              <p className="text-[11px] font-semibold text-gray-500 uppercase">
-                Contacts
-              </p>
-              <div className="mt-1 space-y-1.5">
-                {client.CONTACT1 && (
-                  <div>
-                    <p className="text-gray-800">{client.CONTACT1}</p>
-                    <p className="text-[11px] text-gray-500">
-                      {client.CONTACTNO1 || "No contact number"}
-                    </p>
-                  </div>
-                )}
-                {client.CONTACT2 && (
-                  <div className="pt-1 border-t border-dashed border-gray-200">
-                    <p className="text-gray-800">{client.CONTACT2}</p>
-                    <p className="text-[11px] text-gray-500">
-                      {client.CONTACTNO2 || "No contact number"}
-                    </p>
-                  </div>
-                )}
-                {!client.CONTACT1 && !client.CONTACT2 && (
+          {/* Business Address */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase">
+              Business Address
+            </p>
+            <p className="mt-1 text-gray-800 whitespace-pre-line">
+              {client.BUSADDRESS || "No address on file"}
+              {client.STATE && `\n${client.STATE}`}
+            </p>
+          </div>
+
+          {/* Contacts */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase">
+              Contacts
+            </p>
+            <div className="mt-1 space-y-1.5">
+              {client.CONTACT1 && (
+                <div>
+                  <p className="text-gray-800">{client.CONTACT1}</p>
                   <p className="text-[11px] text-gray-500">
-                    No contacts on file.
+                    {client.CONTACTNO1 || "No contact number"}
                   </p>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
 
-            {/* Key Dates / Status / Salesperson */}
-            <div className="grid grid-cols-2 gap-y-2 gap-x-6">
-              <div>
-                <span className="block text-[10px] uppercase text-gray-500">
-                  MSA Date
-                </span>
-                <span className="text-xs">{formatDate(client.MSA_DATE)}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase text-gray-500">
-                  Live Date
-                </span>
-                <span className="text-xs">{formatDate(client.LIVE_DATE)}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase text-gray-500">
-                  Salesperson
-                </span>
-                <span className="text-xs">{client.SALESPERSON || "—"}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase text-gray-500">
-                  Status
-                </span>
-                <span className="text-xs">{client.STATUS || "—"}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase text-gray-500">
-                  Termination Date
-                </span>
-                <span className="text-xs">
-                  {client.TERMINATIONDATE
-                    ? formatDate(client.TERMINATIONDATE)
-                    : "—"}
-                </span>
-              </div>
+              {client.CONTACT2 && (
+                <div className="pt-1 border-t border-dashed border-gray-200">
+                  <p className="text-gray-800">{client.CONTACT2}</p>
+                  <p className="text-[11px] text-gray-500">
+                    {client.CONTACTNO2 || "No contact number"}
+                  </p>
+                </div>
+              )}
+
+              {!client.CONTACT1 && !client.CONTACT2 && (
+                <p className="text-[11px] text-gray-500">
+                  No contacts on file.
+                </p>
+              )}
             </div>
           </div>
-        )}
+
+          {/* Key Dates / Status / Salesperson */}
+          <div className="grid grid-cols-2 gap-y-2 gap-x-6">
+            <div>
+              <span className="block text-[10px] uppercase text-gray-500">
+                MSA Date
+              </span>
+              <span className="text-xs">{formatDate(client.MSA_DATE)}</span>
+            </div>
+
+            <div>
+              <span className="block text-[10px] uppercase text-gray-500">
+                Live Date
+              </span>
+              <span className="text-xs">{formatDate(client.LIVE_DATE)}</span>
+            </div>
+
+            <div>
+              <span className="block text-[10px] uppercase text-gray-500">
+                Salesperson
+              </span>
+              <span className="text-xs">{client.SALESPERSON || "—"}</span>
+            </div>
+
+            <div>
+              <span className="block text-[10px] uppercase text-gray-500">
+                Status
+              </span>
+              <span className="text-xs">{client.STATUS || "—"}</span>
+            </div>
+
+            <div>
+              <span className="block text-[10px] uppercase text-gray-500">
+                Termination Date
+              </span>
+              <span className="text-xs">
+                {client.TERMINATIONDATE
+                  ? formatDate(client.TERMINATIONDATE)
+                  : "—"}
+              </span>
+            </div>
+          </div>
+
+          {/* Special Instructions */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase">
+              Special Instructions
+            </p>
+            <p className="mt-1 text-[11px] text-gray-700 whitespace-pre-line">
+              {client.SPECIAL_INSTRUCTIONS || "No special instructions."}
+            </p>
+          </div>
+
+          {/* Attachments */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase">
+              Attachments
+            </p>
+
+            <div className="mt-1 space-y-2">
+              {Array.isArray(client.ATTACHMENTS) &&
+              client.ATTACHMENTS.length > 0 ? (
+                client.ATTACHMENTS.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded border border-gray-200"
+                  >
+                    <span
+                      className="text-[11px] text-gray-700 truncate"
+                      title={file?.name}
+                    >
+                      📎 {file?.name || "Unnamed file"}
+                    </span>
+
+                    {file?.url && (
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-[#003b5c] hover:underline ml-2"
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-[11px] text-gray-400">
+                  No attachments available
+                </p>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
 
         {/* BILLING INFO TAB */}
         {activeTab === "Billing Info" && (

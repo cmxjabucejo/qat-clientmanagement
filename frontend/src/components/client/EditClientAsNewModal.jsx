@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
 import { SERVER_URL } from "../lib/constants";
 
 // Helper: convert DB date to yyyy-mm-dd for inputs
@@ -77,11 +76,13 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
     contact2: "",
     contactNo2: "",
     salesperson: "In House",
-    previousNotes: "", // 🔹 read-only original notes
-    notes: "", // 🔹 new note to be appended
+    previousNotes: "",
+    notes: "",
     termDate: "",
     site: "",
-    workSetup: "", // ✅ NEW
+    workSetup: "",
+    specialInstructions: "",
+    attachments: [],
   });
 
   const [saving, setSaving] = useState(false);
@@ -131,6 +132,16 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
         termDate: toInputDate(client.TERMDATE),
         site: client.SITE || "",
         workSetup: client.WORKSETUP || "",
+        specialInstructions: client.SPECIAL_INSTRUCTIONS || "",
+        attachments: Array.isArray(client.ATTACHMENTS)
+          ? client.ATTACHMENTS
+          : (() => {
+              try {
+                return client.ATTACHMENTS ? JSON.parse(client.ATTACHMENTS) : [];
+              } catch {
+                return [];
+              }
+            })(),
       });
       setSaving(false);
       setSubmitStatus("idle");
@@ -265,11 +276,11 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          notes: finalNotes, // <-- send merged notes
-          previousNotes: undefined, // <-- optional: prevent sending separate field
+          attachments: formData.attachments, // 🔥 REQUIRED
+          notes: finalNotes,
           userFirstName: localStorage.getItem("userFirstname"),
           userLastName: localStorage.getItem("userLastname"),
-        }),
+      })
       });
 
       const data = await res.json();
@@ -987,37 +998,118 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
               </div>
             </div>
 
-            {/* Notes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Previous Notes (read-only) */}
-              <div>
-                <label className="block text-[11px] font-medium text-gray-600">
-                  Previous Notes
-                </label>
-                <textarea
-                  rows={6}
-                  value={formData.previousNotes}
-                  readOnly
-                  disabled
-                  className="mt-1 w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] bg-gray-50 text-gray-500 whitespace-pre-line cursor-not-allowed"
-                />
+            {/* Bottom Section: Left = Notes | Right = Special Instructions + Attachments */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* LEFT SIDE */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600">
+                    Previous Notes
+                  </label>
+                  <textarea
+                    rows={6}
+                    value={formData.previousNotes}
+                    readOnly
+                    disabled
+                    className="mt-1 w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] bg-gray-50 text-gray-500 whitespace-pre-line cursor-not-allowed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600">
+                    New Notes
+                  </label>
+                  <textarea
+                    name="notes"
+                    rows={6}
+                    value={formData.notes}
+                    onChange={handleInputChange}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px]"
+                    placeholder="Type your new note here."
+                  />
+                </div>
               </div>
 
-              {/* New Notes */}
-              <div>
-                <label className="block text-[11px] font-medium text-gray-600">
-                  New Notes
-                </label>
-                <textarea
-                  name="notes"
-                  rows={6}
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px]"
-                  placeholder="Type your new note here."
-                />
+              {/* RIGHT SIDE */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600">
+                    Special Instructions
+                  </label>
+                  <textarea
+                    name="specialInstructions"
+                    rows={6}
+                    value={formData.specialInstructions || ""}
+                    onChange={handleInputChange}
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px]"
+                    placeholder="Enter special instructions here."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-600">
+                    Attachments
+                  </label>
+
+                  <div className="mt-1 min-h-[120px] w-full border border-gray-200 rounded-lg bg-gray-50 px-3 py-2">
+                    {formData.attachments?.length > 0 ? (
+                      <ul className="space-y-2 text-[11px]">
+                        {formData.attachments.map((file, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1 border border-gray-100"
+                          >
+                            <span
+                              className="truncate text-gray-700"
+                              title={file?.name || "Attachment"}
+                            >
+                              📎 {file?.name || "Unnamed file"}
+                            </span>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* OPEN */}
+                              {file?.url && (
+                                <a
+                                  href={file.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[#003b5c] hover:underline text-[10px]"
+                                >
+                                  Open
+                                </a>
+                              )}
+
+                              {/* 🔥 REMOVE */}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    attachments: prev.attachments.filter((_, i) => i !== idx),
+                                  }))
+                                }
+                                className="text-red-500 text-[10px] hover:underline"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-[11px] text-gray-400">
+                        No attachments available
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
+
+
+
+
+
 
             {/* Footer buttons */}
             <div className="mt-5 flex justify-end gap-2">
