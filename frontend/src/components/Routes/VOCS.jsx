@@ -399,15 +399,20 @@ const openAttachment = async (key) => {
     }
   };
 
-  const fetchClients = async () => {
-    try {
-      const res = await fetch(`${SERVER_URL}/clients`);
-      const data = await res.json();
-      setClients(data);
-    } catch (err) {
-      console.error("Error fetching clients:", err);
-    }
-  };
+const fetchClients = async () => {
+  try {
+    const res = await fetch(`${SERVER_URL}/api/clients`); // ✅ FIX HERE
+    const data = await res.json();
+    setClients(
+      data.map(c => ({
+        ...c,
+        ACCOUNT: c.ACCOUNT?.toUpperCase()
+      }))
+    );
+  } catch (err) {
+    console.error("Error fetching clients:", err);
+  }
+};
 
 
   /*
@@ -552,7 +557,7 @@ const openAttachment = async (key) => {
                   <option value="">All Clients</option>
                   {clients.map((c, i) => (
                     <option key={i} value={c.ACCOUNT}>
-                      {c.ACCOUNT}
+                       {c.ACCOUNT?.toUpperCase()}
                     </option>
                   ))}
                 </select>
