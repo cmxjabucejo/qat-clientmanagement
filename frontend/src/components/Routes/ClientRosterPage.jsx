@@ -664,6 +664,11 @@ const ClientRosterPage = () => {
                                 : "border-transparent"
                             }`}
                             onClick={() => setSelectedClientId(row.ID)}
+                            onDoubleClick={() => {
+                              setSelectedClientId(row.ID);
+                              setShowEditAsNewModal(true);
+                            }}
+                            title="Double click to edit"
                           >
                             <td className="px-4 py-2">
                               <div className="flex flex-col">

@@ -122,6 +122,32 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
     }
   };
 
+  const openAttachment = async (file) => {
+    try {
+      let key = file;
+
+      // 🔹 handle old data (full S3 URL)
+      if (file.includes(".com/")) {
+        key = file.split(".com/")[1];
+      }
+
+      const res = await fetch(
+        `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`
+      );
+
+      const data = await res.json();
+
+      if (data.success && data.url) {
+        window.open(data.url, "_blank");
+      } else {
+        alert("Failed to open file");
+      }
+    } catch (err) {
+      console.error("Attachment error:", err);
+    }
+  };
+  
+
   return (
     <aside className="w-80 border-l border-gray-200 bg-white/90 backdrop-blur-sm p-4 hidden lg:flex flex-col">
       {/* Header: name + tags */}
@@ -303,14 +329,12 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
                     </span>
 
                     {file?.url && (
-                      <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        onClick={() => openAttachment(file.url)}
                         className="text-[10px] text-[#003b5c] hover:underline ml-2"
                       >
                         Open
-                      </a>
+                      </button>
                     )}
                   </div>
                 ))

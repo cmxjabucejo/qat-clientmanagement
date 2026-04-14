@@ -83,6 +83,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
     workSetup: "",
     specialInstructions: "",
     attachments: [],
+    newFiles: [],
   });
 
   const [saving, setSaving] = useState(false);
@@ -254,7 +255,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
     const { isValid, missing } = validateRequired(formData);
     if (!isValid) {
       setError(
-        `Please fill the required fields for "${formData.status}": ${missing.join(", ")}`,
+        `Please fill the required fields for "${formData.status}": ${missing.join(", ")}`
       );
       return;
     }
@@ -265,22 +266,28 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
       localStorage.getItem("userFirstname"),
       localStorage.getItem("userLastname"),
     );
+
     setError("");
     setSaving(true);
-    // setSubmitStatus("idle");
-    // setSubmitMessage("");
 
     try {
+      const fd = new FormData();
+
+      // 🔹 append normal fields
+      Object.keys(formData).forEach((key) => {
+        if (key !== "newFiles") {
+          fd.append(key, formData[key] ?? "");
+        }
+      });
+
+      // 🔥 append NEW FILES
+      formData.newFiles?.forEach((file) => {
+        fd.append("attachments", file);
+      });
+
       const res = await fetch(`${SERVER_URL}/api/client-roster`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          attachments: formData.attachments, // 🔥 REQUIRED
-          notes: finalNotes,
-          userFirstName: localStorage.getItem("userFirstname"),
-          userLastName: localStorage.getItem("userLastname"),
-      })
+        body: fd, // ❗ NO headers
       });
 
       const data = await res.json();
@@ -292,11 +299,8 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
       setSubmitStatus("success");
       setSubmitMessage("Update saved successfully.");
 
-      // if (onSave && data.data) {
-      //   onSave(data.data);
-      // }
     } catch (err) {
-      console.error("Error saving client (new version):", err);
+      console.error("Error saving client:", err);
       setSubmitStatus("error");
       setSubmitMessage(err.message || "Error saving client.");
     } finally {
@@ -321,6 +325,31 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
   };
 
   if (!isOpen || !client) return null;
+
+  const openAttachment = async (file) => {
+    try {
+      let key = file;
+
+      // 🔹 handle old full S3 URLs
+      if (file.includes(".com/")) {
+        key = file.split(".com/")[1];
+      }
+
+      const res = await fetch(
+        `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`
+      );
+
+      const data = await res.json();
+
+      if (data.success && data.url) {
+        window.open(data.url, "_blank");
+      } else {
+        alert("Failed to open file");
+      }
+    } catch (err) {
+      console.error("Attachment error:", err);
+    }
+  };
 
   return (
     <>
@@ -1011,7 +1040,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                     value={formData.previousNotes}
                     readOnly
                     disabled
-                    className="mt-1 w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] bg-gray-50 text-gray-500 whitespace-pre-line cursor-not-allowed"
+                    className="mt-1 w-full border border-gray-200 rounded-lg px-2 py-1.5 text-[11px] bg-gray-50 text-gray-500 whitespace-pre-line cursor-not-allowed resize-none overflow-y-auto"
                   />
                 </div>
 
@@ -1024,7 +1053,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                     rows={6}
                     value={formData.notes}
                     onChange={handleInputChange}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px]"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] resize-none overflow-y-auto h-32"
                     placeholder="Type your new note here."
                   />
                 </div>
@@ -1041,7 +1070,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                     rows={6}
                     value={formData.specialInstructions || ""}
                     onChange={handleInputChange}
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px]"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] resize-none overflow-y-auto"
                     placeholder="Enter special instructions here."
                   />
                 </div>
@@ -1051,7 +1080,23 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                     Attachments
                   </label>
 
-                  <div className="mt-1 min-h-[120px] w-full border border-gray-200 rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="mt-1 min-h-[120px] w-full border border-gray-200 rounded-lg bg-gray-50 px-3 py-2 h-32">
+
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+
+                        setFormData((prev) => ({
+                          ...prev,
+                          newFiles: [...(prev.newFiles || []), ...files],
+                        }));
+                      }}
+                      className="mt-1 text-[11px]"
+                    />
+
+                    {/* EXISTING FILES */}
                     {formData.attachments?.length > 0 ? (
                       <ul className="space-y-2 text-[11px]">
                         {formData.attachments.map((file, idx) => (
@@ -1059,27 +1104,21 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                             key={idx}
                             className="flex items-center justify-between gap-2 rounded bg-white px-2 py-1 border border-gray-100"
                           >
-                            <span
-                              className="truncate text-gray-700"
-                              title={file?.name || "Attachment"}
-                            >
+                            <span className="truncate text-gray-700">
                               📎 {file?.name || "Unnamed file"}
                             </span>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-2">
                               {/* OPEN */}
-                              {file?.url && (
-                                <a
-                                  href={file.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[#003b5c] hover:underline text-[10px]"
-                                >
-                                  Open
-                                </a>
-                              )}
+                              <button
+                                type="button"
+                                onClick={() => openAttachment(file.url)}
+                                className="text-[#003b5c] text-[10px] hover:underline"
+                              >
+                                Open
+                              </button>
 
-                              {/* 🔥 REMOVE */}
+                              {/* REMOVE */}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1088,7 +1127,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                                     attachments: prev.attachments.filter((_, i) => i !== idx),
                                   }))
                                 }
-                                className="text-red-500 text-[10px] hover:underline"
+                                className="text-red-500 text-[10px]"
                               >
                                 Remove
                               </button>
@@ -1097,11 +1136,42 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-[11px] text-gray-400">
-                        No attachments available
-                      </p>
+                      <p className="text-[11px] text-gray-400">No attachments available</p>
+                    )}
+
+                    {/* 🔥 STEP 3: NEW FILES PREVIEW (ADD THIS HERE) */}
+                    {formData.newFiles?.length > 0 && (
+                      <div className="mt-3 border-t pt-2">
+                        <p className="text-[10px] text-gray-500 mb-1">New Files:</p>
+
+                        {formData.newFiles.map((file, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between bg-blue-50 px-2 py-1 rounded text-[11px]"
+                          >
+                            <span className="truncate">📎 {file.name}</span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  newFiles: prev.newFiles.filter((_, i) => i !== idx),
+                                }))
+                              }
+                              className="text-red-500 text-[10px]"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
+
+
+
+
                 </div>
               </div>
             </div>

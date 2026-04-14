@@ -130,7 +130,7 @@ const ClientSuiteHeader = () => {
                   : "text-gray-700 hover:text-gray-900 hover:border-b-2 hover:border-gray-300"
               }`}
             >
-              VOCS Management
+              VOC Surveys
             </Link>
           )}
         </div>
