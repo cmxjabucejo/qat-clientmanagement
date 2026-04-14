@@ -128,7 +128,7 @@ router.post(
 
         uploadedFiles.push({
           name: file.originalname, // ✅ DISPLAY NAME
-          url: s3Res.Location,     // ✅ ACTUAL FILE LINK
+          url: key
         });
       }
 
@@ -320,6 +320,41 @@ router.get("/clients", async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: "Error fetching clients" });
+  }
+});
+
+/*
+========================================
+CLIENT ATTACHMENT (SIGNED URL)
+========================================
+*/
+router.get("/client-attachment", async (req, res) => {
+  try {
+    const { key } = req.query;
+
+    console.log("CLIENT FILE KEY:", key);
+
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing key",
+      });
+    }
+
+    const url = s3.getSignedUrl("getObject", {
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Expires: 60,
+    });
+
+    res.json({ success: true, url });
+
+  } catch (err) {
+    console.error("CLIENT ATTACHMENT ERROR:", err);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 });
 
