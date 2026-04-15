@@ -198,7 +198,9 @@ router.get("/voc-responses", async (req, res) => {
         overall_comments,
         attachment_files,
         send_copy,
-        submitted_at
+        submitted_at,
+        survey_month AS month,
+        agent
       FROM 1006_customer_survey_system.survey_responses
     `);
 

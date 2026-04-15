@@ -21,22 +21,17 @@ const VOCS = () => {
   1. HELPERS (PURE FUNCTIONS)
   ========================================
   */
+  const getMonthKey = (monthStr) => {
+    if (!monthStr) return "";
 
-  const getMonthKey = (date) => {
-    if (!date) return "";
-    const d = new Date(date.replace(" ", "T"));
-    if (isNaN(d)) return "";
-    return `${d.getFullYear()}-${d.getMonth() + 1}`;
+    const match = String(monthStr).trim().match(/(\d{4})\s*\((\d{2})\)/);
+    if (!match) return "";
+
+    return `${match[1]}-${Number(match[2])}`;
   };
 
-  const getMonth = (date) => {
-    if (!date) return "-";
-    const d = new Date(date.replace(" ", "T"));
-    if (isNaN(d)) return "-";
-    return d.toLocaleString("en-US", {
-      month: "short",
-      year: "numeric",
-    });
+  const getMonth = (monthStr) => {
+    return monthStr || "-";
   };
 
   const ratingColor = (score) => {
@@ -98,28 +93,36 @@ const VOCS = () => {
     }
   };
 
-const openAttachment = async (key) => {
-  console.log("KEY SENT:", key);
+  const openAttachment = async (key) => {
+    console.log("KEY SENT:", key);
 
-  try {
-    const res = await fetch(
-      `${SERVER_URL}/api/voc-attachment?key=${encodeURIComponent(key)}`
-    );
+    try {
+      const res = await fetch(
+        `${SERVER_URL}/api/voc-attachment?key=${encodeURIComponent(key)}`
+      );
 
-    const data = await res.json();
+      const data = await res.json();
 
-    console.log("API RESPONSE:", data);
+      console.log("API RESPONSE:", data);
 
-    if (data.success && data.url) {
-      window.open(data.url, "_blank");
-    } else {
-      alert("Failed to get attachment URL");
+      if (data.success && data.url) {
+        window.open(data.url, "_blank");
+      } else {
+        alert("Failed to get attachment URL");
+      }
+    } catch (err) {
+      console.error("Attachment error:", err);
     }
-  } catch (err) {
-    console.error("Attachment error:", err);
-  }
-};
+  };
 
+
+  const getNPSLabel = (score) => {
+    const s = Number(score);
+
+    if (s <= 6) return { label: "Detractor", style: "bg-red-100 text-red-700" };
+    if (s <= 8) return { label: "Passive", style: "bg-yellow-100 text-yellow-700" };
+    return { label: "Promoter", style: "bg-blue-100 text-blue-700" };
+  };
 
   /*
   ========================================
@@ -156,25 +159,18 @@ const openAttachment = async (key) => {
     const map = new Map();
 
     responses.forEach((r) => {
-      if (!r.submitted_at) return;
+      if (!r.month) return;
 
-      const d = new Date(r.submitted_at.replace(" ", "T"));
-      if (isNaN(d)) return;
+      const key = getMonthKey(r.month);
+      if (!key) return;
 
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      const label = d.toLocaleString("en-US", {
-        month: "short",
-        year: "numeric",
-      });
-
-      map.set(key, label);
+      map.set(key, r.month);
     });
 
     return Array.from(map.entries()).sort(
-      (a, b) => new Date(a[0]) - new Date(b[0])
+      (a, b) => parseMonthKey(a[0]) - parseMonthKey(b[0])
     );
   }, [responses]);
-
 
   // Table filter logic
   const filteredResponses = useMemo(() => {
@@ -193,7 +189,7 @@ const openAttachment = async (key) => {
       : true;
 
       const matchMonth = selectedMonth
-        ? getMonthKey(row.submitted_at) === selectedMonth
+        ? getMonthKey(row.month) === selectedMonth
         : true;
 
       return matchSearch && matchClient && matchMonth;
@@ -208,7 +204,7 @@ const openAttachment = async (key) => {
         : true;
 
       const matchMonth = selectedMonth
-        ? getMonthKey(row.submitted_at) === selectedMonth
+        ? getMonthKey(row.month) === selectedMonth
         : true;
 
       return matchClient && matchMonth;
@@ -263,16 +259,12 @@ const openAttachment = async (key) => {
 
     // 🔹 GROUP ONLY EXISTING DATA
     base.forEach((r) => {
-      if (!r.submitted_at) return;
+      if (!r.month) return;
 
-      const d = new Date(r.submitted_at.replace(" ", "T"));
-      if (isNaN(d)) return;
+      const key = getMonthKey(r.month);
+      if (!key) return;
 
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      const label = d.toLocaleString("en-US", {
-        month: "short",
-        year: "numeric",
-      });
+      const label = r.month;
 
       if (!map.has(key)) {
         map.set(key, {
@@ -289,7 +281,7 @@ const openAttachment = async (key) => {
 
     // 🔹 SORT ONLY MONTHS WITH DATA
     const allMonths = Array.from(map.entries()).sort(
-      (a, b) => new Date(a[0]) - new Date(b[0])
+      (a, b) => parseMonthKey(a[0]) - parseMonthKey(b[0])
     );
 
     // 🔹 DETERMINE END INDEX (ANCHOR MONTH)
@@ -355,6 +347,10 @@ const openAttachment = async (key) => {
   }, []);
 
   useEffect(() => {
+    console.log("MONTH VALUES:", responses.map(r => r.month));
+  }, [responses]);
+
+  useEffect(() => {
     fetchClients();
   }, []);
 
@@ -409,8 +405,8 @@ const surveyedClients = useMemo(() => {
     }
   });
 
-  return Array.from(map.values()).sort((a, b) =>
-    a.localeCompare(b)
+  return Array.from(map.values()).sort(
+    (a, b) => parseMonthKey(getMonthKey(a)) - parseMonthKey(getMonthKey(b))
   );
 }, [responses]);
 
@@ -652,19 +648,21 @@ const surveyedClients = useMemo(() => {
                         <tr>
                           {[
                             "Month",
-                            "Name",
-                            "ACCOUNT",
-                            "Email",
-                            "Tasks",
-                            "Satisfaction",
-                            "Recommend",
+                            "Account",
+                            "Agent/Team",
+                            "NPS",
+                            "CSAT",
                             "Communication",
                             "Collaboration",
                             "Consistency",
                           ].map((col) => (
                             <th
                               key={col}
-                              className="px-4 py-2 text-left font-semibold text-xs text-gray-700 uppercase"
+                              className={`px-4 py-2 font-semibold text-xs text-gray-700 uppercase ${
+                                ["NPS", "CSAT", "Communication", "Collaboration", "Consistency"].includes(col)
+                                  ? "text-center"
+                                  : "text-left"
+                              }`}
                             >
                               {col}
                             </th>
@@ -691,27 +689,39 @@ const surveyedClients = useMemo(() => {
                             }}
                             className="hover:bg-[#e1edf5]/60 transition cursor-pointer"
                           >
-                            <td className="px-4 py-2">{getMonth(row.submitted_at)}</td>
-                            <td className="px-4 py-2 font-medium">{row.name}</td>
+                            <td className="px-4 py-2">{row.month}</td>
                             <td className="px-4 py-2">{row.company}</td>
-                            <td className="px-4 py-2">{row.email}</td>
-                            <td className="px-4 py-2 max-w-xs truncate">{row.tasks}</td>
-
-                            <td className="px-4 py-2">
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] ${ratingColor(row.satisfaction)}`}>
+                            <td className="px-4 py-2">{row.agent || "-"}</td>
+                            <td className="px-4 py-2 text-center">
+                              {(() => {
+                                const nps = getNPSLabel(row.recommend);
+                                return (
+                                  <span className={`inline-flex justify-center px-2 py-0.5 rounded-full text-[11px] ${nps.style}`}>
+                                    {nps.label}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <span className={`inline-flex justify-center px-2 py-0.5 rounded-full text-[11px] ${ratingColor(row.satisfaction)}`}>
                                 {row.satisfaction}
                               </span>
                             </td>
-
-                            <td className="px-4 py-2">
-                              <span className={`px-2 py-0.5 rounded-full text-[11px] ${ratingColor(row.recommend)}`}>
-                                {row.recommend}
+                            <td className="px-4 py-2 text-center">
+                              <span className={`inline-flex justify-center px-2 py-0.5 rounded-full text-[11px] ${ratingColor(row.communication)}`}>
+                                {row.communication}
                               </span>
                             </td>
-
-                            <td className="px-4 py-2">{row.communication}</td>
-                            <td className="px-4 py-2">{row.collaboration}</td>
-                            <td className="px-4 py-2">{row.consistency}</td>
+                            <td className="px-4 py-2 text-center">
+                              <span className={`inline-flex justify-center px-2 py-0.5 rounded-full text-[11px] ${ratingColor(row.collaboration)}`}>
+                                {row.collaboration}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <span className={`inline-flex justify-center px-2 py-0.5 rounded-full text-[11px] ${ratingColor(row.consistency)}`}>
+                                {row.consistency}
+                              </span>
+                            </td>
                           </tr>
                         ))}
 
