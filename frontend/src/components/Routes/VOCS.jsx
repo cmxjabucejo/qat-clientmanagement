@@ -653,7 +653,7 @@ const surveyedClients = useMemo(() => {
                           {[
                             "Month",
                             "Name",
-                            "Company",
+                            "ACCOUNT",
                             "Email",
                             "Tasks",
                             "Satisfaction",
