@@ -222,10 +222,12 @@ export default function SendSurveyEmailModal({
                   className="w-full rounded border px-2 py-1.5"
                 >
                   <option value="">Select</option>
-                  {normalizedClients.map((c, i) => (
-                    <option key={`${c.ACCOUNT}-${i}`} value={c.ACCOUNT}>
-                      {c.ACCOUNT}
-                    </option>
+                  {[...normalizedClients]
+                    .sort((a, b) => a.ACCOUNT.localeCompare(b.ACCOUNT))
+                    .map((c, i) => (
+                      <option key={`${c.ACCOUNT}-${i}`} value={c.ACCOUNT}>
+                        {c.ACCOUNT}
+                      </option>
                   ))}
                 </select>
               </div>
