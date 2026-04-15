@@ -189,8 +189,8 @@ const openAttachment = async (key) => {
         : true;
 
       const matchClient = selectedClient
-        ? row.company === selectedClient
-        : true;
+      ? row.company?.toUpperCase() === selectedClient.toUpperCase()
+      : true;
 
       const matchMonth = selectedMonth
         ? getMonthKey(row.submitted_at) === selectedMonth
@@ -387,18 +387,32 @@ const openAttachment = async (key) => {
 
 const fetchClients = async () => {
   try {
-    const res = await fetch(`${SERVER_URL}/api/clients`); // ✅ FIX HERE
+    const res = await fetch(`${SERVER_URL}/api/clients-active`);
     const data = await res.json();
     setClients(
       data.map(c => ({
         ...c,
-        ACCOUNT: c.ACCOUNT?.toUpperCase()
+        ClientList: c.ClientList?.toUpperCase()
       }))
     );
   } catch (err) {
     console.error("Error fetching clients:", err);
   }
 };
+
+const surveyedClients = useMemo(() => {
+  const map = new Map();
+
+  responses.forEach(r => {
+    if (r.company) {
+      map.set(r.company.toUpperCase(), r.company);
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) =>
+    a.localeCompare(b)
+  );
+}, [responses]);
 
 
   return (
@@ -469,12 +483,13 @@ const fetchClients = async () => {
                 <select
                   value={selectedClient}
                   onChange={(e) => setSelectedClient(e.target.value)}
-                  className="h-9 px-4 text-xs bg-white border border-[#00a1c9] focus:outline-none focus:ring-2 focus:ring-[#00a1c9]"
+                  className="h-9 px-4 text-xs bg-white border border-[#00a1c9]"
                 >
                   <option value="">All Clients</option>
-                  {clients.map((c, i) => (
-                    <option key={i} value={c.ACCOUNT}>
-                       {c.ACCOUNT?.toUpperCase()}
+
+                  {surveyedClients.map((c, i) => (
+                    <option key={i} value={c}>
+                      {c}
                     </option>
                   ))}
                 </select>

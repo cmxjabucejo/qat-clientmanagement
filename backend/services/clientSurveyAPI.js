@@ -344,4 +344,20 @@ router.post("/send-survey-email", async (req, res) => {
   }
 });
 
+router.get("/clients-active", async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT DISTINCT ACCOUNT AS ClientList
+      FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
+      WHERE STATUS = 'Active'
+      ORDER BY ClientList ASC
+    `);
+
+    res.json(rows);
+  } catch (err) {
+    console.error("CLIENT FETCH ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch clients" });
+  }
+});
+
 module.exports = router;
