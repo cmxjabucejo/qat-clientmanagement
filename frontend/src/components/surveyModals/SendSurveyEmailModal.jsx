@@ -287,7 +287,7 @@ export default function SendSurveyEmailModal({
                 />
               </div>
 
-              <div>
+              {/* <div>
                 <label className="mb-1 block text-gray-700">Notes</label>
                 <textarea
                   name="notes"
@@ -297,7 +297,7 @@ export default function SendSurveyEmailModal({
                   placeholder="Enter any additional notes..."
                   className="w-full rounded border px-2 py-1.5"
                 />
-              </div>
+              </div> */}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
