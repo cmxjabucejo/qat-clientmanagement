@@ -276,7 +276,7 @@ export default function SendSurveyEmailModal({
 
               <div>
                 <label className="mb-1 block text-gray-700">
-                  Agent Name <span className="text-red-500">*</span>
+                  Agent / Team Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
