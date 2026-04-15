@@ -25,9 +25,15 @@ HELPERS
 */
 const normalizeDate = (val) => {
   if (!val) return null;
-  if (typeof val !== "string") return val;
-  const trimmed = val.trim();
-  return trimmed === "" ? null : trimmed;
+
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return null;
+
+    return d.toISOString().slice(0, 10); // ✅ YYYY-MM-DD
+  } catch {
+    return null;
+  }
 };
 
 const normalizeNumber = (val) => {
@@ -64,12 +70,12 @@ router.get("/client-roster", async (req, res) => {
       SELECT t1.*
       FROM 1000_cmx_appdata_client_database.db_cmx_client_roster t1
       INNER JOIN (
-        SELECT ACCOUNT, LOB, TASK, MAX(ID) AS max_id
+        SELECT ACCOUNTCODE, MAX(ID) AS max_id
         FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
-        GROUP BY ACCOUNT, LOB, TASK
+        GROUP BY ACCOUNTCODE
       ) t2
       ON t1.ID = t2.max_id
-      ORDER BY t1.ACCOUNT ASC
+      ORDER BY t1.ID DESC
     `);
 
     // ✅ Parse attachments JSON (KEEP THIS — already good)
