@@ -514,7 +514,7 @@ const surveyedClients = useMemo(() => {
                 <div className="bg-white border rounded-lg p-2 shadow-sm">
                   <p className="text-[11px] text-gray-500">NPS</p>
                   <p className="text-lg font-semibold text-[#003b5c]">
-                    {dashboard?.nps}
+                    {isNaN(Number(dashboard?.nps)) ? "--" : `${dashboard.nps}%`}
                   </p>
                 </div>
 
