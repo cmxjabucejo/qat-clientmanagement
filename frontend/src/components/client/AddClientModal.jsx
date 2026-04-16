@@ -1,6 +1,7 @@
 // src/components/modals/AddClientModal.jsx
 import React, { useEffect, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
+import { apiFetch } from "../lib/apiFetch";
 
 const INITIAL_FORM_DATA = {
   effectiveDate: new Date().toISOString().split("T")[0],
@@ -165,7 +166,7 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
       formPayload.append("userFirstName", localStorage.getItem("userFirstname"));
       formPayload.append("userLastName", localStorage.getItem("userLastname"));
 
-      const res = await fetch(`${SERVER_URL}/api/client-roster`, {
+      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, {
         method: "POST",
         body: formPayload, // ❗ no JSON headers
       });

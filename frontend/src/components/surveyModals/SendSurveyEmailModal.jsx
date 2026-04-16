@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
+import { apiFetch } from "../lib/apiFetch";
 
 const getLast3Months = () => {
   const now = new Date();
@@ -126,7 +127,7 @@ export default function SendSurveyEmailModal({
     setEmailLoading(true);
 
     try {
-      const res = await fetch(`${SERVER_URL}/api/send-survey-email`, {
+      const res = await apiFetch(`${SERVER_URL}/api/send-survey-email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

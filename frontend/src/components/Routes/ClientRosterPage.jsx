@@ -6,6 +6,7 @@ import ClientDetailsPanel from "../client/ClientDetailsPanel";
 import AddClientModal from "../client/AddClientModal";
 import EditClientAsNewModal from "../client/EditClientAsNewModal";
 import * as XLSX from "xlsx";
+import { apiFetch } from "../lib/apiFetch";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -43,7 +44,11 @@ const ClientRosterPage = () => {
   const fetchRoster = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${SERVER_URL}/api/client-roster`);
+
+      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, 
+        {
+          method: "GET",
+        });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to fetch roster.");

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
+import { apiFetch } from "../lib/apiFetch";
 
 // Helper: convert DB date to yyyy-mm-dd for inputs
 const toInputDate = (value) => {
@@ -285,7 +286,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
         fd.append("attachments", file);
       });
 
-      const res = await fetch(`${SERVER_URL}/api/client-roster`, {
+      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, {
         method: "POST",
         body: fd, // ❗ NO headers
       });
@@ -335,8 +336,11 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
         key = file.split(".com/")[1];
       }
 
-      const res = await fetch(
-        `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`
+      const res = await apiFetch(
+        `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`,
+          {
+            method: "GET",
+          }
       );
 
       const data = await res.json();
