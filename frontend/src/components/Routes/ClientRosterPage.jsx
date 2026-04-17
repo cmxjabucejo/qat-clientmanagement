@@ -19,7 +19,7 @@ const formatDate = (value) => {
   });
 };
 
-const ClientRosterPage = () => {
+const ClientRosterPage = ({ user }) => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -364,7 +364,7 @@ const ClientRosterPage = () => {
   return (
     <div className="h-screen overflow-hidden bg-[#f5f7fa] flex flex-col">
       {/* Shared header */}
-      <ClientSuiteHeader />
+      <ClientSuiteHeader user={user} />
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden mb-2">

@@ -12,7 +12,7 @@ export default function SessionExpiredModal({ show, onLogin }) {
         </h2>
 
         <p className="text-gray-600 text-sm mb-6">
-          Your session has expired for security reasons.
+          Your session has expired.
           Please log in again to continue.
         </p>
 

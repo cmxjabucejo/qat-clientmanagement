@@ -6,7 +6,7 @@ import ClientEscalationDetailsPanel from "../client/ClientEscalationDetailsPanel
 import AddEscalationModal from "../client/AddEscalationModal";
 import * as XLSX from "xlsx";
 
-const ClientEscalationsPage = () => {
+const ClientEscalationsPage = ({ user }) => {
   const [escalations, setEscalations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -28,7 +28,7 @@ const ClientEscalationsPage = () => {
       const userid = localStorage.getItem("userId");
 
       const res = await axios.get(`${SERVER_URL}/api/escalations`, {
-        headers: { userid, role },
+        withCredentials: true, // 🔥 THIS IS THE FIX
       });
 
       if (res.data?.success) {
@@ -187,7 +187,7 @@ const ClientEscalationsPage = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-[#f5f7fa] flex flex-col">
-      <ClientSuiteHeader />
+      <ClientSuiteHeader user={user} />
       <main className="flex-1 flex overflow-hidden mb-2">
         {/* Left Panel */}
         <aside className="w-64 border-r border-gray-200 bg-white/80 backdrop-blur-sm p-4 space-y-6 text-xs text-gray-800">

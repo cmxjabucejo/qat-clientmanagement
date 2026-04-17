@@ -21,17 +21,17 @@ import IdleWarningModal from "./components/common/IdleWarningModal";
 import useSessionTimer from "./components/lib/useSessionTimer";
 import useInactivityTimer from "./components/lib/useInactivityTimer";
 
-const SERVER_URL = process.env.REACT_APP_SERVER_URL;
+import { SERVER_URL } from "./components/lib/constants";
 
 /*
 ========================================
-🔐 AUTH GUARD (SESSION-BASED)
+🔐 AUTH GUARD
 ========================================
 */
 function RequireAuth({ isAuthed }) {
   const location = useLocation();
 
-  if (isAuthed === false) {
+  if (!isAuthed) {
     return (
       <Navigate
         to="/OauthLogin"
@@ -46,14 +46,13 @@ function RequireAuth({ isAuthed }) {
 
 /*
 ========================================
-🔐 ROLE GUARD (UI-ONLY)
+🔐 ROLE GUARD
 ========================================
 */
-function RequireAdminOrHigher() {
+function RequireAdminOrHigher({ user }) {
   const location = useLocation();
-  const accessLevel = localStorage.getItem("user_access_level");
 
-  if (accessLevel === "User") {
+  if (user?.userLevel === "User") {
     return (
       <Navigate
         to="/ClientEscalations"
@@ -68,7 +67,7 @@ function RequireAdminOrHigher() {
 
 /*
 ========================================
-🔐 REDIRECT IF ALREADY LOGGED IN
+🔐 REDIRECT IF AUTHED
 ========================================
 */
 function RedirectIfAuthenticated({ isAuthed, children }) {
@@ -86,31 +85,32 @@ function RedirectIfAuthenticated({ isAuthed, children }) {
 */
 export default function App() {
   const [isAuthed, setIsAuthed] = useState(null);
+  const [user, setUser] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
   /*
   ========================================
-  🔁 REDIRECT TO LOGIN
+  🔁 REDIRECT
   ========================================
   */
   const handleLoginRedirect = useCallback(() => {
-    localStorage.clear();
     window.location.href = "/OauthLogin";
   }, []);
 
   /*
   ========================================
-  🔒 EXPIRE SESSION STATE
+  🔒 EXPIRE
   ========================================
   */
   const handleExpire = useCallback(() => {
     setSessionExpired(true);
     setIsAuthed(false);
+    setUser(null);
   }, []);
 
   /*
   ========================================
-  🔍 CHECK SESSION ON LOAD
+  🔍 SESSION CHECK
   ========================================
   */
   useEffect(() => {
@@ -119,11 +119,16 @@ export default function App() {
         const res = await fetch(`${SERVER_URL}/api/session`, {
           method: "GET",
           credentials: "include",
+          cache: "no-store",
         });
 
-        if (res.ok) {
+        const data = await res.json();
+
+        if (res.ok && data.success && data.user) {
+          setUser(data.user);
           setIsAuthed(true);
         } else {
+          setUser(null);
           setIsAuthed(false);
         }
       } catch (err) {
@@ -137,92 +142,31 @@ export default function App() {
 
   /*
   ========================================
-  🔔 LISTEN FOR GLOBAL SESSION EXPIRY
+  🔔 GLOBAL SESSION EXPIRED
   ========================================
   */
   useEffect(() => {
-    const onSessionExpired = () => {
-      handleExpire();
-    };
+    const onSessionExpired = () => handleExpire();
 
     window.addEventListener("session-expired", onSessionExpired);
-
-    return () => {
+    return () =>
       window.removeEventListener("session-expired", onSessionExpired);
-    };
   }, [handleExpire]);
 
   /*
   ========================================
-  ⏳ SESSION TIMER (8 HRS WARNING FLOW)
+  ⏳ TIMERS
   ========================================
   */
-  const {
-    showWarning,
-    timeLeft,
-    setShowWarning,
-  } = useSessionTimer(handleExpire);
+  const { showWarning, timeLeft, setShowWarning } =
+    useSessionTimer(handleExpire);
+
+  const { showIdleWarning, idleTimeLeft, setShowIdleWarning } =
+    useInactivityTimer(handleExpire);
 
   /*
   ========================================
-  💤 INACTIVITY TIMER (15 MINS IDLE LOGOUT)
-  ========================================
-  */
-  const {
-    showIdleWarning,
-    idleTimeLeft,
-    setShowIdleWarning,
-  } = useInactivityTimer(handleExpire);
-
-  /*
-  ========================================
-  🔄 STAY LOGGED IN (SESSION WARNING)
-  ========================================
-  */
-  const handleStayLoggedIn = async () => {
-    try {
-      const res = await fetch(`${SERVER_URL}/api/session`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (res.ok) {
-        setShowWarning(false);
-      } else {
-        handleLoginRedirect();
-      }
-    } catch (err) {
-      console.error("Session refresh failed:", err);
-      handleLoginRedirect();
-    }
-  };
-
-  /*
-  ========================================
-  🖱 STAY ACTIVE (IDLE WARNING)
-  ========================================
-  */
-  const handleStayActive = async () => {
-    try {
-      const res = await fetch(`${SERVER_URL}/api/session`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (res.ok) {
-        setShowIdleWarning(false);
-      } else {
-        handleLoginRedirect();
-      }
-    } catch (err) {
-      console.error("Idle keepalive failed:", err);
-      handleLoginRedirect();
-    }
-  };
-
-  /*
-  ========================================
-  ⏳ LOADING STATE
+  ⏳ LOADING
   ========================================
   */
   if (isAuthed === null) {
@@ -241,7 +185,7 @@ export default function App() {
   return (
     <>
       <Routes>
-        {/* PUBLIC ROUTES */}
+        {/* PUBLIC */}
         <Route
           path="/"
           element={
@@ -263,16 +207,16 @@ export default function App() {
         <Route path="/Register" element={<Register />} />
         <Route path="/OTP-SECURE" element={<OtpVerification />} />
 
-        {/* PROTECTED ROUTES */}
+        {/* PROTECTED */}
         <Route element={<RequireAuth isAuthed={isAuthed} />}>
-          <Route element={<RequireAdminOrHigher />}>
-            <Route path="/ClientRoster" element={<ClientRoster />} />
-            <Route path="/VOCS" element={<VOCS />} />
+          <Route element={<RequireAdminOrHigher user={user} />}>
+            <Route path="/ClientRoster" element={<ClientRoster user={user} />} />
+            <Route path="/VOCS" element={<VOCS user={user} />} />
           </Route>
 
           <Route
             path="/ClientEscalations"
-            element={<ClientEscalations />}
+            element={<ClientEscalations user={user} />}
           />
         </Route>
 
@@ -280,24 +224,19 @@ export default function App() {
         <Route path="*" element={<Navigate to="/OauthLogin" replace />} />
       </Routes>
 
-      {/* 🔴 SESSION EXPIRED */}
       <SessionExpiredModal
         show={sessionExpired}
         onLogin={handleLoginRedirect}
       />
 
-      {/* 🟡 SESSION WARNING */}
       <SessionWarningModal
         show={showWarning && !sessionExpired}
         timeLeft={timeLeft}
-        onStay={handleStayLoggedIn}
       />
 
-      {/* 💤 IDLE WARNING */}
       <IdleWarningModal
         show={showIdleWarning && !sessionExpired}
         timeLeft={idleTimeLeft}
-        onStay={handleStayActive}
       />
     </>
   );

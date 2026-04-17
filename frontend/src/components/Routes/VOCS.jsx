@@ -15,7 +15,7 @@ import {
   Legend
 } from "recharts";
 
-const VOCS = () => {
+const VOCS = ({ user }) => {
 
   /*
   ========================================
@@ -424,7 +424,7 @@ const surveyedClients = useMemo(() => {
 
   return (
     <div className="h-screen overflow-hidden bg-[#f5f7fa] flex flex-col">
-      <ClientSuiteHeader />
+      <ClientSuiteHeader user={user} />
 
       <main className="flex-1 flex overflow-hidden mb-2">
         {/* Left panel */}

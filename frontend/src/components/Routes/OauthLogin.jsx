@@ -87,7 +87,21 @@ const OauthLogin = () => {
         body: JSON.stringify({ emailAddress: email }),
       });
 
-      const result = await otpRes.json();
+      if (!otpRes) return;
+
+        // 🔥 HANDLE RATE LIMIT FIRST
+        if (otpRes.status === 429) {
+          const result = await otpRes.json();
+          setError(result.message || "Too many requests. Please wait.");
+          return;
+        }
+
+        const result = await otpRes.json();
+
+        if (!otpRes.ok || !result.success) {
+          setError(result.message || "Failed to send OTP.");
+          return;
+        }
 
       if (!otpRes.ok || !result.success) {
         setError(result.message || "Failed to send OTP.");
@@ -100,6 +114,7 @@ const OauthLogin = () => {
       localStorage.setItem("pendingChallengeId", result.challengeId);
       localStorage.setItem("pendingEmail", email);
       localStorage.setItem("pendingExpiryAt", result.expiresAt);
+      localStorage.setItem("otpCooldownStart", Date.now());
 
       // ===============================
       // 3️⃣ GO TO OTP PAGE
@@ -156,7 +171,7 @@ const OauthLogin = () => {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleManualOtpLogin();
               }}
-              className="text-black w-full border rounded-lg px-3 py-2 text-sm"
+              className="text-black w-full border rounded-lg px-3 py-2 text-sm text-center" 
             />
           </div>
 

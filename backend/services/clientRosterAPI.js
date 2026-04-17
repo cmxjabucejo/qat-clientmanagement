@@ -1,21 +1,49 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/dbconfig");
-
+const { requireAuth } = require("../middleware/authMiddleware");
 const multer = require("multer");
 const AWS = require("aws-sdk");
 
 /*
 ========================================
-UPLOAD CONFIG
+AWS / S3
 ========================================
 */
-const upload = multer({ storage: multer.memoryStorage() });
-
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   region: process.env.AWS_REGION,
+});
+
+/*
+========================================
+UPLOAD CONFIG (HARDENED)
+========================================
+*/
+const ALLOWED_FILE_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+];
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+    files: 10,
+  },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_FILE_TYPES.includes(file.mimetype)) {
+      return cb(new Error("Invalid file type"));
+    }
+    cb(null, true);
+  },
 });
 
 /*
@@ -29,8 +57,7 @@ const normalizeDate = (val) => {
   try {
     const d = new Date(val);
     if (isNaN(d.getTime())) return null;
-
-    return d.toISOString().slice(0, 10); // ✅ YYYY-MM-DD
+    return d.toISOString().slice(0, 10);
   } catch {
     return null;
   }
@@ -40,6 +67,23 @@ const normalizeNumber = (val) => {
   if (val === "" || val === null || val === undefined) return null;
   const num = Number(val);
   return Number.isNaN(num) ? null : num;
+};
+
+const safeString = (val, maxLen = 255) => {
+  if (val === null || val === undefined) return null;
+  return String(val).trim().slice(0, maxLen);
+};
+
+const safeLongText = (val) => {
+  if (val === null || val === undefined) return null;
+  return String(val).trim();
+};
+
+const safeFilename = (name) => {
+  return String(name || "file")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 180);
 };
 
 const formatNoteEntry = (first, last, rawNote) => {
@@ -55,8 +99,35 @@ const formatNoteEntry = (first, last, rawNote) => {
   };
 
   const timestamp = now.toLocaleString("en-US", options).replace(",", "");
+  const safeFirst = safeString(first, 100) || "Unknown";
+  const safeLast = safeString(last, 100) || "User";
 
-  return `---- ${first} ${last} || ${timestamp} ----\n\n${rawNote || ""}`;
+  return `---- ${safeFirst} ${safeLast} || ${timestamp} ----\n\n${safeLongText(rawNote) || ""}`;
+};
+
+const parseAttachments = (value) => {
+  try {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === "object") return value;
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+};
+
+const dedupeAttachments = (files) => {
+  return files.filter(
+    (file, index, self) =>
+      index === self.findIndex((f) => f.url === file.url)
+  );
+};
+
+const isSafeS3Key = (key) => {
+  if (!key || typeof key !== "string") return false;
+  if (key.includes("..")) return false;
+  if (key.includes("\\")) return false;
+  return true;
 };
 
 /*
@@ -64,7 +135,7 @@ const formatNoteEntry = (first, last, rawNote) => {
 GET CLIENT ROSTER
 ========================================
 */
-router.get("/client-roster", async (req, res) => {
+router.get("/client-roster", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT t1.*
@@ -78,25 +149,15 @@ router.get("/client-roster", async (req, res) => {
       ORDER BY t1.ID DESC
     `);
 
-    // ✅ Parse attachments JSON (KEEP THIS — already good)
     const formatted = rows.map((row) => ({
       ...row,
-      ATTACHMENTS: (() => {
-        try {
-          if (!row.ATTACHMENTS) return [];
-          if (typeof row.ATTACHMENTS === "object") return row.ATTACHMENTS;
-          return JSON.parse(row.ATTACHMENTS);
-        } catch (e) {
-          console.warn("Invalid JSON in ATTACHMENTS:", row.ATTACHMENTS);
-          return [];
-        }
-      })(),
+      ATTACHMENTS: parseAttachments(row.ATTACHMENTS),
     }));
 
     res.json({ success: true, data: formatted });
   } catch (err) {
-    console.error("Roster error:", err);
-    res.status(500).json({ error: "Failed to load client roster" });
+    console.error("ROSTER FETCH ERROR:", err);
+    res.status(500).json({ success: false, error: "Failed to load client roster" });
   }
 });
 
@@ -107,21 +168,18 @@ INSERT CLIENT + ATTACHMENTS
 */
 router.post(
   "/client-roster",
+  requireAuth,
   upload.array("attachments"),
   async (req, res) => {
     try {
-      const data = req.body;
+      const data = req.body || {};
       const files = req.files || [];
 
-      /*
-      ========================================
-      UPLOAD FILES TO S3
-      ========================================
-      */
       const uploadedFiles = [];
 
       for (const file of files) {
-        const key = `clientRecordsAttachmentFolder/${Date.now()}_${file.originalname}`;
+        const cleanedName = safeFilename(file.originalname);
+        const key = `clientRecordsAttachmentFolder/${Date.now()}_${cleanedName}`;
 
         const uploadParams = {
           Bucket: process.env.S3_BUCKET,
@@ -130,78 +188,40 @@ router.post(
           ContentType: file.mimetype,
         };
 
-        const s3Res = await s3.upload(uploadParams).promise();
+        await s3.upload(uploadParams).promise();
 
         uploadedFiles.push({
-          name: file.originalname, // ✅ DISPLAY NAME
-          url: key
+          name: cleanedName,
+          url: key,
         });
       }
 
-      /*
-      ========================================
-      FORMAT DATA
-      ========================================
-      */
       const formattedNotes = formatNoteEntry(
         data.userFirstName,
         data.userLastName,
         data.notes
       );
 
-      const specialInstructions = data.specialInstructions || null;
+      const specialInstructions = safeLongText(data.specialInstructions);
 
-      /*
-      ========================================
-      ATTACHMENT MERGE LOGIC (FIXED)
-      ========================================
-      */
+      let previousAttachments = parseAttachments(data.attachments);
 
-      // 🔹 Get previous attachments from frontend
-      let previousAttachments = [];
-
-      try {
-        previousAttachments = data.attachments
-          ? typeof data.attachments === "string"
-            ? JSON.parse(data.attachments)
-            : data.attachments
-          : [];
-      } catch {
-        previousAttachments = [];
-      }
-
-      // 🔹 ALWAYS carry over + append new uploads
-      const finalAttachments = [
-        ...previousAttachments,
-        ...uploadedFiles,
-      ];
-
-      // 🔹 Optional: remove duplicates (by URL)
-      const uniqueAttachments = finalAttachments.filter(
-        (file, index, self) =>
-          index === self.findIndex((f) => f.url === file.url)
-      );
-
-      // 🔹 Convert to JSON for DB
+      const finalAttachments = [...previousAttachments, ...uploadedFiles];
+      const uniqueAttachments = dedupeAttachments(finalAttachments);
       const attachmentsJson = JSON.stringify(uniqueAttachments);
 
-      /*
-      ========================================
-      INSERT
-      ========================================
-      */
       const values = [
         normalizeDate(data.effectiveDate),
-        data.accountCode,
-        data.qbAccount,
-        data.account,
-        data.lob,
-        data.task,
+        safeString(data.accountCode),
+        safeString(data.qbAccount),
+        safeString(data.account),
+        safeString(data.lob),
+        safeString(data.task),
         normalizeDate(data.msaDate),
         normalizeDate(data.liveDate),
-        data.site,
-        data.workSetup,
-        data.staffingModel,
+        safeString(data.site),
+        safeString(data.workSetup),
+        safeString(data.staffingModel),
         normalizeNumber(data.drfte),
         normalizeNumber(data.phfte),
         normalizeNumber(data.dailyWorkHrs),
@@ -209,24 +229,24 @@ router.post(
         normalizeNumber(data.regularRate),
         normalizeNumber(data.premiumRate),
         normalizeNumber(data.depositFee),
-        data.depositFeeWaived,
+        safeString(data.depositFeeWaived, 50),
         normalizeNumber(data.setupFee),
-        data.setupFeeWaived,
+        safeString(data.setupFeeWaived, 50),
         normalizeNumber(data.extraMonitorFeePerUnit),
         normalizeNumber(data.extraMonitorQty),
         normalizeNumber(data.phoneLineFeePerFTEPerMonth),
-        data.billingCycle,
-        data.status,
-        data.busAddress,
-        data.state,
-        data.contact1,
-        data.contactNo1,
-        data.contact2,
-        data.contactNo2,
-        data.salesperson,
+        safeString(data.billingCycle),
+        safeString(data.status),
+        safeString(data.busAddress, 500),
+        safeString(data.state, 100),
+        safeString(data.contact1, 255),
+        safeString(data.contactNo1, 100),
+        safeString(data.contact2, 255),
+        safeString(data.contactNo2, 100),
+        safeString(data.salesperson, 255),
         formattedNotes,
-        specialInstructions, // ✅ NEW
-        attachmentsJson,     // ✅ NEW
+        specialInstructions,
+        attachmentsJson,
         normalizeDate(data.termDate),
       ];
 
@@ -252,10 +272,24 @@ router.post(
         id: result.insertId,
         attachments: uniqueAttachments,
       });
-
     } catch (err) {
-      console.error("Insert error:", err);
-      res.status(500).json({ error: "Insert failed" });
+      console.error("CLIENT ROSTER INSERT ERROR:", err);
+
+      if (err.message === "Invalid file type") {
+        return res.status(400).json({
+          success: false,
+          error: "Invalid file type. Allowed: PDF, PNG, JPG, DOC, DOCX, XLS, XLSX",
+        });
+      }
+
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          success: false,
+          error: "One or more files exceeded the 10MB limit.",
+        });
+      }
+
+      res.status(500).json({ success: false, error: "Insert failed" });
     }
   }
 );
@@ -265,10 +299,14 @@ router.post(
 UPDATE NOTES
 ========================================
 */
-router.put("/client-roster/:id/notes", async (req, res) => {
+router.put("/client-roster/:id/notes", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { note, userFirstName, userLastName } = req.body;
+    const { note, userFirstName, userLastName } = req.body || {};
+
+    if (!id) {
+      return res.status(400).json({ success: false, error: "Missing record ID" });
+    }
 
     const newBlock = formatNoteEntry(userFirstName, userLastName, note);
 
@@ -287,8 +325,8 @@ router.put("/client-roster/:id/notes", async (req, res) => {
 
     res.json({ success: true, notes: updated });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Update failed" });
+    console.error("UPDATE NOTES ERROR:", err);
+    res.status(500).json({ success: false, error: "Update failed" });
   }
 });
 
@@ -297,7 +335,7 @@ router.put("/client-roster/:id/notes", async (req, res) => {
 ACCOUNT DETAILS
 ========================================
 */
-router.get("/accountDetails", async (req, res) => {
+router.get("/accountDetails", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT * FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
@@ -306,7 +344,8 @@ router.get("/accountDetails", async (req, res) => {
 
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: "DB error" });
+    console.error("ACCOUNT DETAILS ERROR:", err);
+    res.status(500).json({ success: false, error: "DB error" });
   }
 });
 
@@ -315,7 +354,7 @@ router.get("/accountDetails", async (req, res) => {
 CLIENTS
 ========================================
 */
-router.get("/clients", async (req, res) => {
+router.get("/clients", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT DISTINCT ACCOUNT
@@ -325,7 +364,8 @@ router.get("/clients", async (req, res) => {
 
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: "Error fetching clients" });
+    console.error("CLIENTS FETCH ERROR:", err);
+    res.status(500).json({ success: false, error: "Error fetching clients" });
   }
 });
 
@@ -334,16 +374,14 @@ router.get("/clients", async (req, res) => {
 CLIENT ATTACHMENT (SIGNED URL)
 ========================================
 */
-router.get("/client-attachment", async (req, res) => {
+router.get("/client-attachment", requireAuth, async (req, res) => {
   try {
     const { key } = req.query;
 
-    console.log("CLIENT FILE KEY:", key);
-
-    if (!key) {
+    if (!isSafeS3Key(key)) {
       return res.status(400).json({
         success: false,
-        message: "Missing key",
+        message: "Invalid attachment key",
       });
     }
 
@@ -354,12 +392,11 @@ router.get("/client-attachment", async (req, res) => {
     });
 
     res.json({ success: true, url });
-
   } catch (err) {
     console.error("CLIENT ATTACHMENT ERROR:", err);
     res.status(500).json({
       success: false,
-      error: err.message,
+      error: "Failed to generate attachment URL",
     });
   }
 });
