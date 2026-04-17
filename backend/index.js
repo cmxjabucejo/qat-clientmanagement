@@ -56,15 +56,14 @@ app.set("trust proxy", 1);
 
 /*
 ========================================
-🔐 SECURITY MIDDLEWARE
+🔐 SECURITY
 ========================================
 */
 app.use(helmet());
-app.use(express.json({ limit: "1mb" }));
 
 /*
 ========================================
-🌐 CORS CONFIG
+🌐 CORS
 ========================================
 */
 app.use(
@@ -76,6 +75,23 @@ app.use(
     credentials: true,
   })
 );
+
+/*
+========================================
+🔥 BODY PARSER (CRITICAL FIX)
+========================================
+// */
+// app.use((req, res, next) => {
+//   const contentType = req.headers["content-type"] || "";
+
+//   // 🚫 Skip JSON parsing for file uploads
+//   if (contentType.startsWith("multipart/form-data")) {
+//     return next();
+//   }
+
+//   express.json({ limit: "1mb" })(req, res, next);
+// });
+// app.use(express.urlencoded({ extended: true }));
 
 /*
 ========================================
@@ -95,18 +111,17 @@ redisClient.on("error", (err) => {
 
 /*
 ========================================
-🔥 START SERVER (ASYNC SAFE INIT)
+🔥 START SERVER
 ========================================
 */
 async function startServer() {
   try {
-    // ✅ Connect Redis FIRST
     await redisClient.connect();
     console.log("✅ Redis connected");
 
     /*
     ========================================
-    🧠 SESSION STORE (REDIS)
+    🧠 SESSION
     ========================================
     */
     const redisStore = new SessionStore({
@@ -114,11 +129,6 @@ async function startServer() {
       prefix: "cmx:",
     });
 
-    /*
-    ========================================
-    🔐 SESSION CONFIG
-    ========================================
-    */
     app.use(
       session({
         name: process.env.SESSION_NAME || "cmx_cms_session",
@@ -128,51 +138,41 @@ async function startServer() {
         saveUninitialized: false,
         cookie: {
           httpOnly: true,
-          secure: false,        // ✅ MUST be false in localhost
-          sameSite: "lax",      // ✅ correct for localhost (NOT "none")
+          secure: false,
+          sameSite: "lax",
           maxAge: 1000 * 60 * 60 * 8,
           path: "/",
-        }
+        },
       })
     );
 
     /*
     ========================================
-    🔥 REDIS RATE LIMITER
+    🔥 RATE LIMITERS
     ========================================
     */
-
-    // 🔴 OTP LIMITER (STRICT)
     const otpLimiter = rateLimit({
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
       }),
-      windowMs: 60 * 1000, // 1 minute
+      windowMs: 60 * 1000,
       max: 5,
-      standardHeaders: true,
-      legacyHeaders: false,
-      keyGenerator: (req) => req.ip,
-      message: {
-        success: false,
-        message: "Too many OTP requests. Please wait.",
-      },
+      keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
     });
 
-    // 🟢 GENERAL LIMITER
     const generalLimiter = rateLimit({
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
       }),
       windowMs: 15 * 60 * 1000,
       max: 300,
-      standardHeaders: true,
-      legacyHeaders: false,
-      skip: (req) => req.originalUrl.startsWith("/api/sendOTP"),
+      keyGenerator: (req) =>
+        req.session?.user?.id || rateLimit.ipKeyGenerator(req),
     });
 
     /*
     ========================================
-    📦 IMPORT ROUTES
+    📦 ROUTES
     ========================================
     */
     const authAPI = require("./services/authAPI");
@@ -180,19 +180,20 @@ async function startServer() {
     const clientEscalationAPI = require("./services/clientEscalationAPI");
     const clientSurveyAPI = require("./services/clientSurveyAPI");
 
-    /*
-    ========================================
-    🚀 APPLY LIMITERS
-    ========================================
-    */
     app.use("/api/sendOTP", otpLimiter);
-    app.use("/api", generalLimiter);
 
-    /*
-    ========================================
-    🚀 ROUTES
-    ========================================
-    */
+    // 🚫 CRITICAL: skip limiter for multipart
+    app.use("/api", (req, res, next) => {
+      const contentType = req.headers["content-type"] || "";
+
+      // 🚫 completely skip BOTH limiter AND json parsing path
+      if (contentType.startsWith("multipart/form-data")) {
+        return next();
+      }
+
+      return generalLimiter(req, res, next);
+    });
+
     app.use("/api", authAPI);
     app.use("/api", clientRosterAPI);
     app.use("/api", clientEscalationAPI);
@@ -209,7 +210,7 @@ async function startServer() {
 
     /*
     ========================================
-    🚀 START SERVER
+    🚀 START
     ========================================
     */
     app.listen(PORT, () => {
@@ -222,9 +223,4 @@ async function startServer() {
   }
 }
 
-/*
-========================================
-🚀 INIT
-========================================
-*/
 startServer();

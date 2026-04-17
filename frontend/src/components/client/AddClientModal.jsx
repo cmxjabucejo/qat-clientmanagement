@@ -2,6 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
 import { apiFetch } from "../lib/apiFetch";
+import axios from "axios";
+
+axios.defaults.withCredentials = true;
 
 const INITIAL_FORM_DATA = {
   effectiveDate: new Date().toISOString().split("T")[0],
@@ -109,6 +112,7 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
     const missing = [];
 
     if (!data.account || !data.account.trim()) missing.push("Account");
+    if (!data.lob || !data.lob.trim()) missing.push("LOB");
     if (!data.task || !data.task.trim()) missing.push("Task");
     if (!data.status || !data.status.trim()) missing.push("Status");
     if (!data.contact1 || !data.contact1.trim()) missing.push("Contact 1");
@@ -153,7 +157,11 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
       // append all fields
       Object.keys(formData).forEach((key) => {
         if (key !== "attachments") {
-          formPayload.append(key, formData[key]);
+          const value = formData[key];
+
+          if (value !== "" && value !== null && value !== undefined) {
+            formPayload.append(key, value);
+          }
         }
       });
 
@@ -166,14 +174,14 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
       formPayload.append("userFirstName", localStorage.getItem("userFirstname"));
       formPayload.append("userLastName", localStorage.getItem("userLastname"));
 
-      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, {
-        method: "POST",
-        body: formPayload, // ❗ no JSON headers
-      });
+      const res = await axios.post(
+        `${SERVER_URL}/api/client-roster`,
+        formPayload
+      );
 
-      const data = await res.json();
+      const data = res.data;
 
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to save client.");
       }
 

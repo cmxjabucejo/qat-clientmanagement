@@ -64,9 +64,16 @@ const ClientEscalationDetailsPanel = ({ escalation, onReload }) => {
 
           <button
             onClick={handleUpdateClick}
-            className="px-4 py-2 text-[#00a1c9] border border-[#00a1c9] rounded-md text-sm font-semibold hover:bg-[#e0f7fd] transition-colors"
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors
+              ${
+                escalation.STATUS === "Closed"
+                  ? "text-gray-600 border border-gray-300 hover:bg-gray-100"
+                  : "text-[#00a1c9] border border-[#00a1c9] hover:bg-[#e0f7fd]"
+              }`}
           >
-            Update Escalation
+            {escalation.STATUS === "Closed"
+              ? "View Escalation"
+              : "Update Escalation"}
           </button>
         </div>
 

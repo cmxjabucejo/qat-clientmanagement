@@ -27,7 +27,7 @@ const getOtherFees = (client) => {
   return extra + phone;
 };
 
-const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
+const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew, onRefresh }) => {
   const [activeTab, setActiveTab] = useState("Profile");
 
   // Add Notes modal state
@@ -111,6 +111,10 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
       // Update parent state so NOTES tab reflects immediately
       if (onNotesUpdated) {
         onNotesUpdated(client.ID, data.notes);
+      }
+
+      if (onRefresh) {
+        onRefresh(); // 🔥 refresh entire roster
       }
 
       setShowNotesModal(false);

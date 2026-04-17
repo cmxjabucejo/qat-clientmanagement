@@ -15,19 +15,30 @@ const ESCALATION_BUCKET = "cmxclientescalationfiles";
 */
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = [
+    const allowedMimeTypes = [
       "image/png",
       "image/jpeg",
+      "image/jpg",
+      "image/webp",
       "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ];
 
-    if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error("Invalid file type"), false);
+    const allowedExtensions = [".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx", ".xlsx"];
+
+    const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf("."));
+
+    if (
+      allowedMimeTypes.includes(file.mimetype) ||
+      allowedExtensions.includes(ext)
+    ) {
+      return cb(null, true);
     }
 
-    cb(null, true);
+    return cb(new Error("Invalid file type"), false);
   },
 });
 
@@ -43,9 +54,8 @@ router.get("/escalMaxId", requireAuth, async (req, res) => {
     );
 
     res.json({ maxId: rows[0]?.escalmaxID || 0 });
-
   } catch (err) {
-    console.error("ESCAL MAX ID ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch max escalation ID" });
   }
 });
@@ -62,9 +72,8 @@ router.get("/oicList", requireAuth, async (req, res) => {
     );
 
     res.json(rows);
-
   } catch (err) {
-    console.error("OIC LIST ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch OIC list" });
   }
 });
@@ -81,58 +90,83 @@ router.get("/escalations", requireAuth, async (req, res) => {
     );
 
     res.json({ success: true, data: rows });
-
   } catch (err) {
-    console.error("ESCALATIONS ERROR:", err);
+    console.error(err);
     res.status(500).json({ error: "Failed to fetch escalations" });
   }
 });
 
 /*
 ========================================
-➕ ADD ESCALATION
+➕ ADD ESCALATION (MULTIPLE FILES)
 ========================================
 */
 router.post(
   "/add-escalation",
   requireAuth,
-  upload.single("file"),
+  upload.array("files", 10),
   async (req, res) => {
     try {
-      let attachmentKey = null;
+      let attachmentKeys = [];
 
-      if (req.file) {
-        // 🔐 SAFE FILE NAME
-        const safeName = req.file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+          const key = `uploads/${Date.now()}-${safeName}`;
 
-        attachmentKey = `uploads/${Date.now()}-${safeName}`;
-
-        await s3
-          .upload({
+          await s3.upload({
             Bucket: ESCALATION_BUCKET,
-            Key: attachmentKey,
-            Body: req.file.buffer,
-            ContentType: req.file.mimetype,
-          })
-          .promise();
+            Key: key,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          }).promise();
+
+          attachmentKeys.push(key);
+        }
       }
 
       await db.query(
-        `INSERT INTO 1000_cmx_appdata_client_database.db_cmx_client_escalations 
-         (ESCALATIONID, ACCOUNT, ATTACHMENT)
-         VALUES (?, ?, ?)`,
-        [req.body.escalationID, req.body.account, attachmentKey]
+        `INSERT INTO 1000_cmx_appdata_client_database.db_cmx_client_escalations (
+          ESCALATIONID,
+          ESCALATION_DATE,
+          CLIENTCATEGORY,
+          ACCOUNT,
+          LOB,
+          TASK,
+          SITE,
+          OIC,
+          OIC_EMAIL,
+          ESCALATIONTYPE,
+          ESCALATIONDETAILS,
+          CRITICALITY,
+          STATUS,
+          ATTACHMENT
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          req.body.escalationID,
+          req.body.escalationDate,
+          req.body.clientCategory,
+          req.body.account,
+          req.body.lob,
+          req.body.task,
+          req.body.site,
+          req.body.oic,
+          req.body.oicEmail,
+          req.body.escalationType,
+          req.body.escalationDetails,
+          req.body.criticality,
+          req.body.status || "Open",
+          JSON.stringify(attachmentKeys),
+        ]
       );
 
       res.json({ success: true });
-
     } catch (err) {
-      console.error("ADD ESCALATION ERROR:", err);
+      console.error("ADD ERROR:", err);
 
-      // Handle multer file errors cleanly
       if (err.message === "Invalid file type") {
         return res.status(400).json({
-          error: "Only PNG, JPG, and PDF files are allowed",
+          error: "Only PNG, JPG, PDF, DOCX, XLSX allowed",
         });
       }
 
@@ -143,18 +177,79 @@ router.post(
 
 /*
 ========================================
-✏️ UPDATE ESCALATION (PLACEHOLDER)
+✏️ UPDATE ESCALATION (ADD FILES)
 ========================================
 */
-router.post("/updateEscalationInfo", requireAuth, async (req, res) => {
-  try {
-    // TODO: implement actual update logic
+router.post(
+  "/updateEscalationInfo",
+  requireAuth,
+  upload.array("files", 10),
+  async (req, res) => {
+    try {
+      let existing = [];
 
-    res.json({ success: true });
+      try {
+        existing = JSON.parse(req.body.attachment || "[]");
+      } catch {
+        existing = [];
+      }
+
+      let newFiles = [];
+
+      if (req.files && req.files.length > 0) {
+        for (const file of req.files) {
+          const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+          const key = `uploads/${Date.now()}-${safeName}`;
+
+          await s3.upload({
+            Bucket: ESCALATION_BUCKET,
+            Key: key,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          }).promise();
+
+          newFiles.push(key);
+        }
+      }
+
+      const finalFiles = [...existing, ...newFiles];
+
+      await db.query(
+        `UPDATE 1000_cmx_appdata_client_database.db_cmx_client_escalations
+         SET ATTACHMENT = ?
+         WHERE ESCALATIONID = ?`,
+        [JSON.stringify(finalFiles), req.body.escalationID]
+      );
+
+      res.json({ success: true });
+    } catch (err) {
+      console.error("UPDATE ERROR:", err);
+      res.status(500).json({ error: "Update failed" });
+    }
+  }
+);
+
+router.get("/get-file", requireAuth, async (req, res) => {
+  try {
+    const { key } = req.query;
+
+    if (!key) {
+      return res.status(400).json({ error: "Missing file key" });
+    }
+
+    const params = {
+      Bucket: ESCALATION_BUCKET,
+      Key: key,
+      Expires: 60 * 5, // 5 minutes
+    };
+
+    const url = s3.getSignedUrl("getObject", params);
+
+    res.redirect(url); // 🔥 redirects to S3 file
 
   } catch (err) {
-    console.error("UPDATE ESCALATION ERROR:", err);
-    res.status(500).json({ error: "Update failed" });
+    console.error("GET FILE ERROR:", err);
+    res.status(500).json({ error: "Failed to get file" });
   }
 });
 

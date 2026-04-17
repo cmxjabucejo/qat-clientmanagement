@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { SERVER_URL } from "../lib/constants";
 
+axios.defaults.withCredentials = true;
+
 const formatDate = (date) => {
   if (!date) return "";
   const d = new Date(date);
@@ -18,6 +20,7 @@ const UpdateEscalationModal = ({
   const [oicOptions, setOicOptions] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [attachments, setAttachments] = useState([]);
   const [userName, setUserName] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -32,9 +35,10 @@ const UpdateEscalationModal = ({
 
         if (!email) return;
 
-        const res = await axios.post(`${SERVER_URL}/api/check-email`, {
-          email,
-        });
+        const res = await axios.post(
+          `${SERVER_URL}/api/check-email`,
+          { email },
+        );
 
         if (res.data?.success) {
           const role = res.data.user.userLevel || "";
@@ -94,13 +98,33 @@ const UpdateEscalationModal = ({
       attachment: escalationData.ATTACHMENT,
     });
 
+    try {
+      const parsed = JSON.parse(escalationData.ATTACHMENT || "[]");
+      setAttachments(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setAttachments([]);
+    }
+
     setAttachmentUrl(escalationData.attachmentUrl || "");
   }, [isOpen, escalationData]);
 
   useEffect(() => {
-    axios.get(`${SERVER_URL}/api/oicList`).then((res) => {
-      setOicOptions(res.data || []);
-    });
+    const fetchOIC = async () => {
+      try {
+        const res = await axios.get(`${SERVER_URL}/api/oicList`, {
+        });
+
+        setOicOptions(res.data || []);
+      } catch (err) {
+        console.error("OIC fetch failed:", err);
+
+        if (err.response?.status === 401) {
+          console.warn("Session expired while loading modal");
+        }
+      }
+    };
+
+    fetchOIC();
   }, []);
 
   const handleChange = (e) => {
@@ -170,12 +194,19 @@ const UpdateEscalationModal = ({
     };
 
     const formToSend = new FormData();
+
     Object.entries(updatedForm).forEach(([key, val]) => {
       formToSend.append(key, val || "");
     });
 
-    if (selectedFile) {
-      formToSend.append("file", selectedFile);
+    // ✅ EXISTING FILES
+    formToSend.append("attachment", JSON.stringify(attachments));
+
+    // ✅ NEW FILES
+    if (selectedFile && selectedFile.length > 0) {
+      selectedFile.forEach((file) => {
+        formToSend.append("files", file);
+      });
     }
 
     formToSend.append("userName", userName);
@@ -186,7 +217,7 @@ const UpdateEscalationModal = ({
         formToSend,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        },
+        }
       );
 
       if (res.data?.success) {
@@ -211,7 +242,7 @@ const UpdateEscalationModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
       <div className="bg-white w-full max-w-3xl rounded-xl shadow-lg p-6 relative">
         <h2 className="text-sm font-semibold text-gray-800 mb-4">
-          Update Escalation
+          Escalation Details
         </h2>
 
         {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
@@ -444,24 +475,32 @@ const UpdateEscalationModal = ({
             </div>
           </div>
 
-          <div className="col-span-2">
-            <label>Attachment</label>
-            {formData.attachment && attachmentUrl && (
-              <p>
-                <a
-                  href={attachmentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 underline"
-                >
-                  📁 Download
-                </a>
-              </p>
+          <div className="col-span-2 space-y-1">
+            <label className="block">Attachment</label>
+
+            {attachments.length > 0 && (
+              <div className="space-y-1">
+                {attachments.map((file, idx) => (
+                  <div key={idx}>
+                    <a
+                      href={`${SERVER_URL}/api/get-file?key=${file}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline text-xs"
+                    >
+                      📎 {file.split("/").pop()}
+                    </a>
+                  </div>
+                ))}
+              </div>
             )}
+
             <input
               type="file"
-              onChange={handleFileChange}
+              multiple
+              onChange={(e) => setSelectedFile(Array.from(e.target.files))}
               disabled={isClosed}
+              className="mt-1"
             />
           </div>
 

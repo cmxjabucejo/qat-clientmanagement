@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
 import { apiFetch } from "../lib/apiFetch";
+import axios from "axios";
+
+axios.defaults.withCredentials = true;
 
 // Helper: convert DB date to yyyy-mm-dd for inputs
 const toInputDate = (value) => {
@@ -276,7 +279,9 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
 
       // 🔹 append normal fields
       Object.keys(formData).forEach((key) => {
-        if (key !== "newFiles") {
+        if (key === "attachments") {
+          fd.append("existingAttachments", JSON.stringify(formData.attachments));
+        } else if (key !== "newFiles") {
           fd.append(key, formData[key] ?? "");
         }
       });
@@ -286,14 +291,14 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
         fd.append("attachments", file);
       });
 
-      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, {
-        method: "POST",
-        body: fd, // ❗ NO headers
-      });
+      const res = await axios.post(
+        `${SERVER_URL}/api/client-roster`,
+        fd
+      );
 
-      const data = await res.json();
+      const data = res.data;
 
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || "Failed to save client.");
       }
 

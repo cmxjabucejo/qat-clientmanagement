@@ -168,27 +168,57 @@ INSERT CLIENT + ATTACHMENTS
 */
 router.post(
   "/client-roster",
-  requireAuth,
   upload.array("attachments"),
+  requireAuth,
   async (req, res) => {
     try {
-      const data = req.body || {};
+      console.log("🔥 ROUTE HIT: /client-roster");
+
+      // 👇 ADD THIS LINE HERE
+      console.log("CONTENT-TYPE:", req.headers["content-type"]);
+
+      console.log("BODY:", req.body);
+      console.log("FILES:", req.files);
+
+      const data = { ...req.body };
+      const existingAttachments = parseAttachments(data.existingAttachments);
       const files = req.files || [];
 
+      /*
+      ========================================
+      VALIDATION (STRICT)
+      ========================================
+      */
+      const requiredFields = ["account", "lob", "task"];
+
+      for (const field of requiredFields) {
+        if (!data[field] || !String(data[field]).trim()) {
+          return res.status(400).json({
+            success: false,
+            error: `${field.toUpperCase()} is required`,
+          });
+        }
+      }
+
+      /*
+      ========================================
+      UPLOAD FILES TO S3
+      ========================================
+      */
       const uploadedFiles = [];
 
       for (const file of files) {
         const cleanedName = safeFilename(file.originalname);
         const key = `clientRecordsAttachmentFolder/${Date.now()}_${cleanedName}`;
 
-        const uploadParams = {
-          Bucket: process.env.S3_BUCKET,
-          Key: key,
-          Body: file.buffer,
-          ContentType: file.mimetype,
-        };
-
-        await s3.upload(uploadParams).promise();
+        await s3
+          .upload({
+            Bucket: process.env.S3_BUCKET,
+            Key: key,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          })
+          .promise();
 
         uploadedFiles.push({
           name: cleanedName,
@@ -196,60 +226,97 @@ router.post(
         });
       }
 
+      /*
+      ========================================
+      ATTACHMENTS (SAFE)
+      ========================================
+      */
+      const finalAttachments = dedupeAttachments([
+        ...existingAttachments,
+        ...uploadedFiles,
+      ]);
+
+      const attachmentsJson = JSON.stringify(finalAttachments);
+
+      /*
+      ========================================
+      NOTES FORMAT
+      ========================================
+      */
       const formattedNotes = formatNoteEntry(
         data.userFirstName,
         data.userLastName,
         data.notes
       );
 
-      const specialInstructions = safeLongText(data.specialInstructions);
-
-      let previousAttachments = parseAttachments(data.attachments);
-
-      const finalAttachments = [...previousAttachments, ...uploadedFiles];
-      const uniqueAttachments = dedupeAttachments(finalAttachments);
-      const attachmentsJson = JSON.stringify(uniqueAttachments);
-
+      /*
+      ========================================
+      VALUES (SAFE + CLEAN)
+      ========================================
+      */
       const values = [
         normalizeDate(data.effectiveDate),
-        safeString(data.accountCode),
-        safeString(data.qbAccount),
-        safeString(data.account),
-        safeString(data.lob),
-        safeString(data.task),
+
+        safeString(data.accountCode) || null,
+        safeString(data.qbAccount) || null,
+
+        safeString(data.account) || null,
+        safeString(data.lob) || null,
+        safeString(data.task) || null,
+
         normalizeDate(data.msaDate),
         normalizeDate(data.liveDate),
-        safeString(data.site),
-        safeString(data.workSetup),
-        safeString(data.staffingModel),
+
+        safeString(data.site) || null,
+        safeString(data.workSetup) || null,
+        safeString(data.staffingModel) || null,
+
         normalizeNumber(data.drfte),
         normalizeNumber(data.phfte),
         normalizeNumber(data.dailyWorkHrs),
         normalizeNumber(data.holidayHrs),
+
         normalizeNumber(data.regularRate),
         normalizeNumber(data.premiumRate),
+
         normalizeNumber(data.depositFee),
-        safeString(data.depositFeeWaived, 50),
+        safeString(data.depositFeeWaived, 50) || null,
+
         normalizeNumber(data.setupFee),
-        safeString(data.setupFeeWaived, 50),
+        safeString(data.setupFeeWaived, 50) || null,
+
         normalizeNumber(data.extraMonitorFeePerUnit),
         normalizeNumber(data.extraMonitorQty),
+
         normalizeNumber(data.phoneLineFeePerFTEPerMonth),
-        safeString(data.billingCycle),
-        safeString(data.status),
-        safeString(data.busAddress, 500),
-        safeString(data.state, 100),
-        safeString(data.contact1, 255),
-        safeString(data.contactNo1, 100),
-        safeString(data.contact2, 255),
-        safeString(data.contactNo2, 100),
-        safeString(data.salesperson, 255),
+
+        safeString(data.billingCycle) || null,
+        safeString(data.status) || null,
+
+        safeString(data.busAddress, 500) || null,
+        safeString(data.state, 100) || null,
+
+        safeString(data.contact1, 255) || null,
+        safeString(data.contactNo1, 100) || null,
+
+        safeString(data.contact2, 255) || null,
+        safeString(data.contactNo2, 100) || null,
+
+        safeString(data.salesperson, 255) || null,
+
         formattedNotes,
-        specialInstructions,
+        safeLongText(data.specialInstructions),
+
         attachmentsJson,
+
         normalizeDate(data.termDate),
       ];
 
+      /*
+      ========================================
+      INSERT
+      ========================================
+      */
       const [result] = await db.execute(
         `INSERT INTO 1000_cmx_appdata_client_database.db_cmx_client_roster (
           EFFECTIVEDATE, ACCOUNTCODE, QBACCOUNT, ACCOUNT, LOB, TASK,
@@ -267,10 +334,15 @@ router.post(
         values
       );
 
+      /*
+      ========================================
+      SUCCESS RESPONSE
+      ========================================
+      */
       res.json({
         success: true,
         id: result.insertId,
-        attachments: uniqueAttachments,
+        attachments: uploadedFiles,
       });
     } catch (err) {
       console.error("CLIENT ROSTER INSERT ERROR:", err);
@@ -278,7 +350,8 @@ router.post(
       if (err.message === "Invalid file type") {
         return res.status(400).json({
           success: false,
-          error: "Invalid file type. Allowed: PDF, PNG, JPG, DOC, DOCX, XLS, XLSX",
+          error:
+            "Invalid file type. Allowed: PDF, PNG, JPG, DOC, DOCX, XLS, XLSX",
         });
       }
 
@@ -289,7 +362,10 @@ router.post(
         });
       }
 
-      res.status(500).json({ success: false, error: "Insert failed" });
+      res.status(500).json({
+        success: false,
+        error: "Insert failed",
+      });
     }
   }
 );

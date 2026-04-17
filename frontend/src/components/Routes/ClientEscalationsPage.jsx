@@ -16,10 +16,15 @@ const ClientEscalationsPage = ({ user }) => {
   const [selectedResolution, setSelectedResolution] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState([]);
   const [selectedOIC, setSelectedOIC] = useState("");
-  const [sortDate, setSortDate] = useState("desc");
-  const [sortAlpha, setSortAlpha] = useState("az");
   const [selectedEscalation, setSelectedEscalation] = useState(null);
+  const [selectedYear, setSelectedYear] = useState("");
+  const [selectedQuarter, setSelectedQuarter] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [sortConfig, setSortConfig] = useState({
+    key: "ESCALATION_DATE",
+    direction: "desc",
+  });
 
   // Define at top level inside the component
   const fetchEscalations = async () => {
@@ -53,58 +58,68 @@ const ClientEscalationsPage = ({ user }) => {
     fetchEscalations();
   }, []);
 
+  const getYear = (date) => new Date(date).getFullYear();
+
+  const getMonth = (date) => new Date(date).getMonth() + 1; // 1–12
+
+  const getQuarter = (date) => {
+    const m = new Date(date).getMonth() + 1;
+    return Math.ceil(m / 3); // Q1–Q4
+  };
+
   const filteredEscalations = useMemo(() => {
     return escalations
       .filter((e) => {
         if (selectedType && e.ESCALATIONTYPE !== selectedType) return false;
         if (selectedOIC && e.OIC !== selectedOIC) return false;
-        if (
-          selectedCriticality.length > 0 &&
-          !selectedCriticality.includes(e.CRITICALITY)
-        )
-          return false;
-        if (
-          selectedResolution.length > 0 &&
-          !selectedResolution.includes(e.RESOLUTIONSTATUS)
-        )
-          return false;
-        if (selectedStatus.length > 0 && !selectedStatus.includes(e.STATUS))
-          return false;
-        if (
-          searchTerm &&
-          !e.ACCOUNT?.toLowerCase().includes(searchTerm.toLowerCase())
-        )
-          return false;
+
+        if (selectedCriticality.length > 0 && !selectedCriticality.includes(e.CRITICALITY)) return false;
+        if (selectedResolution.length > 0 && !selectedResolution.includes(e.RESOLUTIONSTATUS)) return false;
+        if (selectedStatus.length > 0 && !selectedStatus.includes(e.STATUS)) return false;
+
+        if (selectedYear && getYear(e.ESCALATION_DATE) !== Number(selectedYear)) return false;
+        if (selectedQuarter && getQuarter(e.ESCALATION_DATE) !== Number(selectedQuarter)) return false;
+        if (selectedMonth && getMonth(e.ESCALATION_DATE) !== Number(selectedMonth)) return false;
+
+        if (searchTerm && !e.ACCOUNT?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+
         return true;
       })
       .sort((a, b) => {
-        // Sort by Escalation Date
-        const dateDiff =
-          new Date(b.ESCALATION_DATE) - new Date(a.ESCALATION_DATE);
-        if (sortDate === "asc") {
-          if (dateDiff !== 0) return -dateDiff;
-        } else if (sortDate === "desc") {
-          if (dateDiff !== 0) return dateDiff;
+        const { key, direction } = sortConfig;
+
+        let valA = a[key];
+        let valB = b[key];
+
+        // Handle dates
+        if (key === "ESCALATION_DATE" || key === "RESOLVEDDATE") {
+          valA = new Date(valA);
+          valB = new Date(valB);
         }
 
-        // If dates are the same or date sort isn't selected, apply account sort
-        if (sortAlpha === "az") {
-          return (a.ACCOUNT || "").localeCompare(b.ACCOUNT || "");
-        } else {
-          return (b.ACCOUNT || "").localeCompare(a.ACCOUNT || "");
+        // Handle strings
+        if (typeof valA === "string") {
+          valA = valA.toLowerCase();
+          valB = valB?.toLowerCase();
         }
-      });
-  }, [
-    escalations,
-    selectedType,
-    selectedCriticality,
-    selectedResolution,
-    selectedStatus,
-    selectedOIC,
-    searchTerm,
-    sortDate,
-    sortAlpha,
-  ]);
+
+        if (valA < valB) return direction === "asc" ? -1 : 1;
+        if (valA > valB) return direction === "asc" ? 1 : -1;
+        return 0;
+      })
+      }, [
+      escalations,
+      selectedType,
+      selectedCriticality,
+      selectedResolution,
+      selectedStatus,
+      selectedOIC,
+      searchTerm,
+      selectedYear,
+      selectedQuarter,
+      selectedMonth,
+      sortConfig
+    ]);
 
   // ---- STATS ----
   const totalCount = filteredEscalations.length;
@@ -185,6 +200,36 @@ const ClientEscalationsPage = ({ user }) => {
     XLSX.writeFile(workbook, "escalations.xlsx");
   };
 
+
+  const years = [...new Set(escalations.map(e => getYear(e.ESCALATION_DATE)))].sort((a,b) => b-a);
+
+  const months = [
+    { value: 1, label: "Jan" },
+    { value: 2, label: "Feb" },
+    { value: 3, label: "Mar" },
+    { value: 4, label: "Apr" },
+    { value: 5, label: "May" },
+    { value: 6, label: "Jun" },
+    { value: 7, label: "Jul" },
+    { value: 8, label: "Aug" },
+    { value: 9, label: "Sep" },
+    { value: 10, label: "Oct" },
+    { value: 11, label: "Nov" },
+    { value: 12, label: "Dec" }
+  ];
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-[#f5f7fa] flex flex-col">
       <ClientSuiteHeader user={user} />
@@ -196,30 +241,22 @@ const ClientEscalationsPage = ({ user }) => {
             <h2 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
               Escalation Type
             </h2>
-            {["All", ...Object.keys(typeCounts)].map((type) => {
-              const count =
-                type === "All" ? escalations.length : typeCounts[type] || 0;
 
-              const isSelected =
-                selectedType === type || (type === "All" && !selectedType);
+            <select
+              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              value={selectedType}
+              onChange={(e) => setSelectedType(e.target.value)}
+            >
+              <option value="">All</option>
 
-              return (
-                <button
-                  key={type}
-                  onClick={() => setSelectedType(type === "All" ? "" : type)}
-                  className={`w-full flex justify-between items-center px-3 py-1 rounded-md mb-1 ${
-                    isSelected
-                      ? "bg-[#e1edf5] text-[#003b5c] font-semibold"
-                      : "text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  <span>{type}</span>
-                  <span className="inline-flex items-center justify-center text-[10px] font-medium bg-gray-100 text-gray-600 rounded-full w-6 h-5">
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+              {Object.keys(typeCounts)
+                .sort()
+                .map((type) => (
+                  <option key={type} value={type}>
+                    {type} ({typeCounts[type]})
+                  </option>
+                ))}
+            </select>
           </div>
 
           {/* Criticality */}
@@ -300,6 +337,58 @@ const ClientEscalationsPage = ({ user }) => {
             ))}
           </div>
 
+          {/* Year */}
+          <div>
+            <h2 className="text-[11px] font-semibold text-gray-500 uppercase mb-1">
+              Year
+            </h2>
+            <select
+              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              <option value="">All</option>
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Quarter */}
+          <div>
+            <h2 className="text-[11px] font-semibold text-gray-500 uppercase mb-1">
+              Quarter
+            </h2>
+            <select
+              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              value={selectedQuarter}
+              onChange={(e) => setSelectedQuarter(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="1">Q1</option>
+              <option value="2">Q2</option>
+              <option value="3">Q3</option>
+              <option value="4">Q4</option>
+            </select>
+          </div>
+
+          {/* Month */}
+          <div>
+            <h2 className="text-[11px] font-semibold text-gray-500 uppercase mb-1">
+              Month
+            </h2>
+            <select
+              className="w-full border border-gray-300 rounded-md px-2 py-1 text-xs"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            >
+              <option value="">All</option>
+              {months.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
           {/* OIC Dropdown */}
           <div>
             <h2 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -317,60 +406,6 @@ const ClientEscalationsPage = ({ user }) => {
                 </option>
               ))}
             </select>
-          </div>
-
-          {/* Sort */}
-          <div>
-            <h2 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">
-              Sort
-            </h2>
-            <div className="flex flex-col gap-2">
-              <div className="flex justify-between">
-                <button
-                  className={`w-full px-2 py-1 rounded-md ${
-                    sortDate === "asc"
-                      ? "bg-[#003b5c] text-white"
-                      : "bg-white text-gray-700 border border-gray-300"
-                  }`}
-                  onClick={() => setSortDate("asc")}
-                >
-                  Oldest → Newest
-                </button>
-                <button
-                  className={`w-full px-2 py-1 rounded-md ${
-                    sortDate === "desc"
-                      ? "bg-[#003b5c] text-white"
-                      : "bg-white text-gray-700 border border-gray-300"
-                  }`}
-                  onClick={() => setSortDate("desc")}
-                >
-                  Newest → Oldest
-                </button>
-              </div>
-
-              <div className="flex justify-between">
-                <button
-                  className={`w-full px-2 py-1 rounded-md ${
-                    sortAlpha === "az"
-                      ? "bg-[#003b5c] text-white"
-                      : "bg-white text-gray-700 border border-gray-300"
-                  }`}
-                  onClick={() => setSortAlpha("az")}
-                >
-                  A–Z
-                </button>
-                <button
-                  className={`w-full px-2 py-1 rounded-md ${
-                    sortAlpha === "za"
-                      ? "bg-[#003b5c] text-white"
-                      : "bg-white text-gray-700 border border-gray-300"
-                  }`}
-                  onClick={() => setSortAlpha("za")}
-                >
-                  Z–A
-                </button>
-              </div>
-            </div>
           </div>
         </aside>
 
@@ -433,24 +468,34 @@ const ClientEscalationsPage = ({ user }) => {
                 ) : (
                   <div className="max-h-[calc(100vh-220px)] overflow-y-auto">
                     <table className="min-w-full text-xs">
-                      <thead className="bg-gray-500 border-b border-gray-100 sticky top-0 z-10">
+                      <thead className="border-b border-gray-100 sticky top-0 z-10">
                         <tr>
                           {[
-                            "Escalation Date",
-                            "Account",
-                            "Type",
-                            "Criticality",
-                            "Status",
+                            { label: "Escalation Date", key: "ESCALATION_DATE" },
+                            { label: "Account", key: "ACCOUNT" },
+                            { label: "Type", key: "ESCALATIONTYPE" },
+                            { label: "Criticality", key: "CRITICALITY" },
+                            { label: "Status", key: "STATUS" },
                           ].map((col) => (
                             <th
-                              key={col}
-                              className="px-4 py-2 text-left font-semibold text-xs text-gray-800 uppercase tracking-wide bg-gray-50"
+                              key={col.key}
+                              onClick={() => handleSort(col.key)}
+                              className="px-4 py-2 text-left font-semibold text-xs text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer select-none hover:bg-gray-100"
                             >
-                              {col}
+                              <div className="flex items-center gap-1">
+                                {col.label}
+
+                                {sortConfig.key === col.key && (
+                                  <span className="text-[10px]">
+                                    {sortConfig.direction === "asc" ? "▲" : "▼"}
+                                  </span>
+                                )}
+                              </div>
                             </th>
                           ))}
                         </tr>
                       </thead>
+
                       <tbody className="divide-y divide-gray-50">
                         {filteredEscalations.length === 0 ? (
                           <tr>
@@ -466,19 +511,26 @@ const ClientEscalationsPage = ({ user }) => {
                             <tr
                               key={row.ID}
                               onClick={() => setSelectedEscalation(row)}
-                              className={`hover:bg-[#e1edf5]/50 cursor-pointer ${
-                                selectedEscalation?.ID === row.ID
-                                  ? "bg-white"
-                                  : ""
-                              }`}
+                              className={`cursor-pointer transition
+                                hover:bg-[#e1edf5]/50
+                                ${
+                                  selectedEscalation?.ID === row.ID
+                                    ? "bg-[#f0f6fa]"
+                                    : ""
+                                }`}
                             >
                               <td className="px-4 py-2">
                                 {formatDate(row.ESCALATION_DATE)}
                               </td>
-                              <td className="px-4 py-2">{row.ACCOUNT}</td>
+
+                              <td className="px-4 py-2 font-medium text-gray-800">
+                                {row.ACCOUNT}
+                              </td>
+
                               <td className="px-4 py-2">
                                 {row.ESCALATIONTYPE}
                               </td>
+
                               <td className="px-4 py-2">
                                 <span
                                   className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium
@@ -486,13 +538,14 @@ const ClientEscalationsPage = ({ user }) => {
                                     row.CRITICALITY === "High"
                                       ? "bg-red-100 text-red-700"
                                       : row.CRITICALITY === "Medium"
-                                        ? "bg-yellow-100 text-yellow-800"
-                                        : "bg-blue-100 text-blue-700"
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : "bg-blue-100 text-blue-700"
                                   }`}
                                 >
                                   {row.CRITICALITY || "—"}
                                 </span>
                               </td>
+
                               <td className="px-4 py-2">
                                 <span
                                   className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium
@@ -500,8 +553,8 @@ const ClientEscalationsPage = ({ user }) => {
                                     row.STATUS === "Closed"
                                       ? "bg-blue-100 text-blue-800"
                                       : row.STATUS === "Pending"
-                                        ? "bg-yellow-100 text-yellow-800"
-                                        : "bg-red-100 text-red-700"
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : "bg-red-100 text-red-700"
                                   }`}
                                 >
                                   {row.STATUS || "—"}

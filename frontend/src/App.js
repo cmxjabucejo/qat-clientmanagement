@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback} from "react";
 import {
   Routes,
   Route,
@@ -31,7 +31,7 @@ import { SERVER_URL } from "./components/lib/constants";
 function RequireAuth({ isAuthed }) {
   const location = useLocation();
 
-  if (!isAuthed) {
+  if (isAuthed === false)  {
     return (
       <Navigate
         to="/OauthLogin"
@@ -71,7 +71,7 @@ function RequireAdminOrHigher({ user }) {
 ========================================
 */
 function RedirectIfAuthenticated({ isAuthed, children }) {
-  return isAuthed ? (
+  return isAuthed === true ? (
     <Navigate to="/ClientEscalations" replace />
   ) : (
     children
@@ -84,6 +84,7 @@ function RedirectIfAuthenticated({ isAuthed, children }) {
 ========================================
 */
 export default function App() {
+  const location = useLocation();
   const [isAuthed, setIsAuthed] = useState(null);
   const [user, setUser] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -113,6 +114,9 @@ export default function App() {
   🔍 SESSION CHECK
   ========================================
   */
+
+
+
   useEffect(() => {
     const checkSession = async () => {
       try {
@@ -128,17 +132,16 @@ export default function App() {
           setUser(data.user);
           setIsAuthed(true);
         } else {
-          setUser(null);
-          setIsAuthed(false);
+          handleExpire(); // 🔥 FORCE LOGOUT
         }
       } catch (err) {
         console.error("Session check failed:", err);
-        setIsAuthed(false);
+        handleExpire(); // 🔥 FORCE LOGOUT
       }
     };
 
     checkSession();
-  }, []);
+  }, [location.pathname]); // 🔥 KEY CHANGE
 
   /*
   ========================================
