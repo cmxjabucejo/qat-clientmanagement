@@ -1,98 +1,246 @@
-import React, { useEffect } from "react";
-import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
+import React, { useEffect, useState, useCallback} from "react";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  Outlet,
+} from "react-router-dom";
+
 import OauthLogin from "./components/Routes/OauthLogin";
 import ClientRoster from "./components/Routes/ClientRosterPage";
 import ClientEscalations from "./components/Routes/ClientEscalationsPage";
 import VOCS from "./components/Routes/VOCS";
 import Register from "./components/Routes/Register";
 import OtpVerification from "./components/common/OtpVerification";
-import UserService from "./service/UserService";
 
-// ✅ Route Guard: Checks if user is authenticated
-function RequireAuth() {
+import SessionExpiredModal from "./components/common/SessionExpiredModal";
+import SessionWarningModal from "./components/common/SessionWarningModal";
+import IdleWarningModal from "./components/common/IdleWarningModal";
+
+import useSessionTimer from "./components/lib/useSessionTimer";
+import useInactivityTimer from "./components/lib/useInactivityTimer";
+
+import { SERVER_URL } from "./components/lib/constants";
+
+/*
+========================================
+🔐 AUTH GUARD
+========================================
+*/
+function RequireAuth({ isAuthed }) {
   const location = useLocation();
-  const authed = UserService.isAuthenticated();
 
-  return authed ? (
-    <Outlet />
+  if (isAuthed === false)  {
+    return (
+      <Navigate
+        to="/OauthLogin"
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
+  }
+
+  return <Outlet />;
+}
+
+/*
+========================================
+🔐 ROLE GUARD
+========================================
+*/
+function RequireAdminOrHigher({ user }) {
+  const location = useLocation();
+
+  if (user?.userLevel === "User") {
+    return (
+      <Navigate
+        to="/ClientEscalations"
+        replace
+        state={{ from: location.pathname }}
+      />
+    );
+  }
+
+  return <Outlet />;
+}
+
+/*
+========================================
+🔐 REDIRECT IF AUTHED
+========================================
+*/
+function RedirectIfAuthenticated({ isAuthed, children }) {
+  return isAuthed === true ? (
+    <Navigate to="/ClientEscalations" replace />
   ) : (
-    <Navigate to="/OauthLogin" replace state={{ from: location.pathname }} />
+    children
   );
 }
 
-// ✅ Role Guard
-function RequireAdminOrHigher() {
-  const location = useLocation();
-  const accessLevel = localStorage.getItem("user_access_level");
-
-  return accessLevel !== "User" ? (
-    <Outlet />
-  ) : (
-    <Navigate
-      to="/ClientEscalations"
-      replace
-      state={{ from: location.pathname }}
-    />
-  );
-}
-
-// ✅ Prevent logged-in users from going back to login
-function RedirectIfAuthenticated({ children }) {
-  const authed = UserService.isAuthenticated();
-
-  return authed ? <Navigate to="/ClientEscalations" replace /> : children;
-}
-
-// ✅ Routes
+/*
+========================================
+🚀 MAIN APP
+========================================
+*/
 export default function App() {
-  //🔥 FORCE LOGOUT WHEN TAB CLOSES
-  // useEffect(() => {
-  //   const handleTabClose = () => {
-  //     UserService.logout();
-  //   };
+  const location = useLocation();
+  const [isAuthed, setIsAuthed] = useState(null);
+  const [user, setUser] = useState(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
-  //   window.addEventListener("beforeunload", handleTabClose);
+  /*
+  ========================================
+  🔁 REDIRECT
+  ========================================
+  */
+  const handleLoginRedirect = useCallback(() => {
+    window.location.href = "/OauthLogin";
+  }, []);
 
-  //   return () => {
-  //     window.removeEventListener("beforeunload", handleTabClose);
-  //   };
-  // }, []);
+  /*
+  ========================================
+  🔒 EXPIRE
+  ========================================
+  */
+  const handleExpire = useCallback(() => {
+    setSessionExpired(true);
+    setIsAuthed(false);
+    setUser(null);
+  }, []);
 
+  /*
+  ========================================
+  🔍 SESSION CHECK
+  ========================================
+  */
+
+
+
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/session`, {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success && data.user) {
+          setUser(data.user);
+          setIsAuthed(true);
+        } else {
+          handleExpire(); // 🔥 FORCE LOGOUT
+        }
+      } catch (err) {
+        console.error("Session check failed:", err);
+        handleExpire(); // 🔥 FORCE LOGOUT
+      }
+    };
+
+    checkSession();
+  }, [location.pathname]); // 🔥 KEY CHANGE
+
+  /*
+  ========================================
+  🔔 GLOBAL SESSION EXPIRED
+  ========================================
+  */
+  useEffect(() => {
+    const onSessionExpired = () => handleExpire();
+
+    window.addEventListener("session-expired", onSessionExpired);
+    return () =>
+      window.removeEventListener("session-expired", onSessionExpired);
+  }, [handleExpire]);
+
+  /*
+  ========================================
+  ⏳ TIMERS
+  ========================================
+  */
+  const { showWarning, timeLeft, setShowWarning } =
+    useSessionTimer(handleExpire);
+
+  const { showIdleWarning, idleTimeLeft, setShowIdleWarning } =
+    useInactivityTimer(handleExpire);
+
+  /*
+  ========================================
+  ⏳ LOADING
+  ========================================
+  */
+  if (isAuthed === null) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-white">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  /*
+  ========================================
+  🚀 ROUTES
+  ========================================
+  */
   return (
-    <Routes>
-      {/* Public Routes */}
-      <Route
-        path="/"
-        element={
-          <RedirectIfAuthenticated>
-            <OauthLogin />
-          </RedirectIfAuthenticated>
-        }
-      />
-      <Route
-        path="/OauthLogin"
-        element={
-          <RedirectIfAuthenticated>
-            <OauthLogin />
-          </RedirectIfAuthenticated>
-        }
-      />
-      <Route path="/Register" element={<Register />} />
-      <Route path="/OTP-SECURE" element={<OtpVerification />} />
+    <>
+      <Routes>
+        {/* PUBLIC */}
+        <Route
+          path="/"
+          element={
+            <RedirectIfAuthenticated isAuthed={isAuthed}>
+              <OauthLogin />
+            </RedirectIfAuthenticated>
+          }
+        />
 
-      {/* Protected Routes */}
-      <Route element={<RequireAuth />}>
-        {/* Only allow non-"User" roles to access ClientRoster */}
-        <Route element={<RequireAdminOrHigher />}>
-          <Route path="/ClientRoster" element={<ClientRoster />} />
-          <Route path="/VOCS" element={<VOCS />} />
+        <Route
+          path="/OauthLogin"
+          element={
+            <RedirectIfAuthenticated isAuthed={isAuthed}>
+              <OauthLogin />
+            </RedirectIfAuthenticated>
+          }
+        />
+
+        <Route path="/Register" element={<Register />} />
+        <Route path="/OTP-SECURE" element={<OtpVerification />} />
+
+        {/* PROTECTED */}
+        <Route element={<RequireAuth isAuthed={isAuthed} />}>
+          <Route element={<RequireAdminOrHigher user={user} />}>
+            <Route path="/ClientRoster" element={<ClientRoster user={user} />} />
+            <Route path="/VOCS" element={<VOCS user={user} />} />
+          </Route>
+
+          <Route
+            path="/ClientEscalations"
+            element={<ClientEscalations user={user} />}
+          />
         </Route>
-        {/* Accessible by all authenticated users */}
-        <Route path="/ClientEscalations" element={<ClientEscalations />} />
-      </Route>
 
-      {/* ✅ Catch ALL unknown/manual URLs */}
-      <Route path="*" element={<Navigate to="/OauthLogin" replace />} />
-    </Routes>
+        {/* FALLBACK */}
+        <Route path="*" element={<Navigate to="/OauthLogin" replace />} />
+      </Routes>
+
+      <SessionExpiredModal
+        show={sessionExpired}
+        onLogin={handleLoginRedirect}
+      />
+
+      <SessionWarningModal
+        show={showWarning && !sessionExpired}
+        timeLeft={timeLeft}
+      />
+
+      <IdleWarningModal
+        show={showIdleWarning && !sessionExpired}
+        timeLeft={idleTimeLeft}
+      />
+    </>
   );
 }

@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require("../config/dbconfig");
 const AWS = require("aws-sdk");
 const nodemailer = require("nodemailer");
+const { requireAuth } = require("../middleware/authMiddleware");
 
 const s3 = new AWS.S3();
 const ESCALATION_BUCKET = "cmxclientescalationfiles";
@@ -20,35 +21,19 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  tls: {
-    rejectUnauthorized: false,
-  },
+  tls: { rejectUnauthorized: false },
 });
 
 /*
 ==================================================
-HELPERS
+🔐 HELPERS (HARDENED)
 ==================================================
 */
 const MONTH_REGEX = /^\d{4} \(\d{2}\) [A-Z][a-z]{2}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const validateMonth = (month) => MONTH_REGEX.test(month || "");
-
-const formatMonthDisplay = (monthStr) => {
-  const match = String(monthStr || "").match(/^(\d{4}) \((\d{2})\) (\w{3})$/);
-  if (!match) return monthStr || "";
-
-  const [, year, , shortMonth] = match;
-
-  try {
-    return new Date(`${shortMonth} 1, ${year}`).toLocaleString("en-US", {
-      month: "long",
-      year: "numeric",
-    });
-  } catch {
-    return monthStr;
-  }
-};
+const validateEmail = (email) => EMAIL_REGEX.test(email || "");
 
 const escapeHtml = (value) => {
   return String(value ?? "")
@@ -59,20 +44,8 @@ const escapeHtml = (value) => {
     .replace(/'/g, "&#39;");
 };
 
-const nl2br = (value) => escapeHtml(value).replace(/\n/g, "<br/>");
-
-const buildSurveyLink = ({
-  month,
-  client,
-  agentName,
-  recipientName,
-  email,
-}) => {
+const buildSurveyLink = ({ month, client, agentName, recipientName, email }) => {
   const baseUrl = "https://voc.cmxph.com/company-survey";
-
-    if (!baseUrl) {
-      throw new Error("SURVEY_FRONTEND_URL is not defined.");
-    }
 
   const params = new URLSearchParams();
   params.append("month", month);
@@ -80,16 +53,14 @@ const buildSurveyLink = ({
   params.append("agent", agentName);
   params.append("email", email);
 
-  if (recipientName) {
-    params.append("name", recipientName);
-  }
+  if (recipientName) params.append("name", recipientName);
 
   return `${baseUrl}?${params.toString()}`;
 };
 
 /*
 ==================================================
-EMAIL TEMPLATE
+📧 EMAIL TEMPLATE
 ==================================================
 */
 const getEmailHtml = ({
@@ -98,11 +69,8 @@ const getEmailHtml = ({
   emailType,
   recipientName,
   agentName,
-  notes,
   email,
 }) => {
-  const displayMonth = formatMonthDisplay(month);
-
   const greeting = recipientName
     ? `Greetings, ${escapeHtml(recipientName)}`
     : "Greetings,";
@@ -141,34 +109,17 @@ const getEmailHtml = ({
           <strong>${escapeHtml(client)}</strong>, we would truly appreciate your feedback on
           <strong>${escapeHtml(audienceText)}</strong> handled by
           <strong>${escapeHtml(agentName)}</strong> during
-          <strong>${escapeHtml(displayMonth)}</strong>.
-        </p>
-
-        <p>
-          Your feedback will help us better understand how we are performing
-          and identify opportunities to further improve the quality of our services.
+          <strong>${escapeHtml(month)}</strong>.
         </p>
 
         <div style="text-align:center; margin:30px 0;">
           <a href="${surveyLink}"
-             style="
-               background:#0b4a66;
-               color:white;
-               padding:12px 24px;
-               text-decoration:none;
-               border-radius:8px;
-               display:inline-block;
-               font-weight:bold;
-             ">
+             style="background:#0b4a66;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;">
             Take the Survey
           </a>
         </div>
 
         <p>The survey should only take a few minutes to complete.</p>
-
-        <p>
-          Thank you for taking the time to share your feedback and for your continued partnership with Callmax.
-        </p>
 
       </div>
     </div>
@@ -181,7 +132,7 @@ const getEmailHtml = ({
 📊 GET SURVEY RESPONSES
 ==================================================
 */
-router.get("/voc-responses", async (req, res) => {
+router.get("/voc-responses", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT
@@ -207,23 +158,23 @@ router.get("/voc-responses", async (req, res) => {
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error("VOC FETCH ERROR:", err);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: "Failed to fetch data" });
   }
 });
 
 /*
 ==================================================
-📎 GET ATTACHMENT
+📎 GET ATTACHMENT (SAFE)
 ==================================================
 */
-router.get("/voc-attachment", async (req, res) => {
+router.get("/voc-attachment", requireAuth, async (req, res) => {
   try {
     const { key } = req.query;
 
-    if (!key) {
+    if (!key || key.includes("..")) {
       return res.status(400).json({
         success: false,
-        message: "Missing key",
+        message: "Invalid file key",
       });
     }
 
@@ -238,17 +189,17 @@ router.get("/voc-attachment", async (req, res) => {
     console.error("S3 ERROR:", err);
     res.status(500).json({
       success: false,
-      error: err.message,
+      error: "Failed to generate file URL",
     });
   }
 });
 
 /*
 ==================================================
-📧 SEND SURVEY EMAIL
+📧 SEND SURVEY EMAIL (HARDENED)
 ==================================================
 */
-router.post("/send-survey-email", async (req, res) => {
+router.post("/send-survey-email", requireAuth, async (req, res) => {
   try {
     const {
       month,
@@ -260,6 +211,7 @@ router.post("/send-survey-email", async (req, res) => {
       notes,
     } = req.body || {};
 
+    // 🔐 VALIDATION
     if (!month || !client || !emailType || !email || !agentName) {
       return res.status(400).json({
         success: false,
@@ -267,17 +219,17 @@ router.post("/send-survey-email", async (req, res) => {
       });
     }
 
-    if (emailType === "individual" && !recipientName) {
+    if (!validateEmail(email)) {
       return res.status(400).json({
         success: false,
-        message: "Recipient name is required for individual email type.",
+        message: "Invalid email address.",
       });
     }
 
     if (!validateMonth(month)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid month format. Expected: YYYY (MM) Mmm",
+        message: "Invalid month format.",
       });
     }
 
@@ -288,38 +240,33 @@ router.post("/send-survey-email", async (req, res) => {
       });
     }
 
+    if (emailType === "individual" && !recipientName) {
+      return res.status(400).json({
+        success: false,
+        message: "Recipient name required.",
+      });
+    }
+
     const html = getEmailHtml({
       month,
       client,
       emailType,
       recipientName,
       agentName,
-      notes,
       email,
     });
 
     await transporter.sendMail({
-      from: "noreply@callmaxsolutions.com",
+      from: "Callmax Solutions <noreply@callmaxsolutions.com>",
       to: email,
       subject: `VOC Survey Request - ${month}`,
       html,
     });
 
     await db.execute(
-      `
-      INSERT INTO 1006_customer_survey_system.email_requests
-      (
-        month,
-        client,
-        email_type,
-        email,
-        recipient_name,
-        agent_name,
-        notes,
-        sent_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-      `,
+      `INSERT INTO 1006_customer_survey_system.email_requests
+       (month, client, email_type, email, recipient_name, agent_name, notes, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         month,
         client,
@@ -333,20 +280,24 @@ router.post("/send-survey-email", async (req, res) => {
 
     res.json({
       success: true,
-      message: `Survey email sent for ${month}`,
+      message: "Survey email sent",
     });
+
   } catch (err) {
     console.error("EMAIL ERROR:", err);
-
     res.status(500).json({
       success: false,
       message: "Failed to send email",
-      error: err.message,
     });
   }
 });
 
-router.get("/clients-active", async (req, res) => {
+/*
+==================================================
+📋 CLIENT LIST
+==================================================
+*/
+router.get("/clients-active", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT DISTINCT ACCOUNT AS ClientList

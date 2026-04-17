@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
 import ClientSuiteHeader from "../common/ClientSuiteHeader";
 import ViewResponseModal from "../surveyModals/ViewResponseModal";
+import { apiFetch } from "../lib/apiFetch";
 import SendSurveyEmailModal from "../surveyModals/SendSurveyEmailModal";
 import {
   LineChart,
@@ -14,7 +15,7 @@ import {
   Legend
 } from "recharts";
 
-const VOCS = () => {
+const VOCS = ({ user }) => {
 
   /*
   ========================================
@@ -97,8 +98,12 @@ const VOCS = () => {
     console.log("KEY SENT:", key);
 
     try {
-      const res = await fetch(
-        `${SERVER_URL}/api/voc-attachment?key=${encodeURIComponent(key)}`
+
+      const res = await apiFetch(
+        `${SERVER_URL}/api/voc-attachment?key=${encodeURIComponent(key)}`, 
+        {
+          method: "GET",
+        }
       );
 
       const data = await res.json();
@@ -365,7 +370,10 @@ const VOCS = () => {
     try {
       setLoading(true);
 
-      const res = await fetch(`${SERVER_URL}/api/voc-responses`);
+      const res = await apiFetch(`${SERVER_URL}/api/voc-responses`, 
+      {
+        method: "GET",
+      });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
@@ -383,7 +391,10 @@ const VOCS = () => {
 
 const fetchClients = async () => {
   try {
-    const res = await fetch(`${SERVER_URL}/api/clients-active`);
+
+    const res = await apiFetch(`${SERVER_URL}/api/clients-active`, {
+      method: "GET",
+    });
     const data = await res.json();
     setClients(
       data.map(c => ({
@@ -413,7 +424,7 @@ const surveyedClients = useMemo(() => {
 
   return (
     <div className="h-screen overflow-hidden bg-[#f5f7fa] flex flex-col">
-      <ClientSuiteHeader />
+      <ClientSuiteHeader user={user} />
 
       <main className="flex-1 flex overflow-hidden mb-2">
         {/* Left panel */}

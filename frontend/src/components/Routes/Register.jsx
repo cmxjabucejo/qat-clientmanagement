@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import logo from "../../assets/cmxlogo-removebg-preview.png";
 import { SERVER_URL } from "../lib/constants";
 import UserService from "../../service/UserService";
+import { apiFetch } from "../lib/apiFetch";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -59,7 +60,7 @@ const Register = () => {
     setIsSubmitting(true);
 
     try {
-      const registerRes = await fetch(`${SERVER_URL}/api/register`, {
+      const registerRes = await apiFetch(`${SERVER_URL}/api/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -126,7 +127,7 @@ const Register = () => {
           requestedDateTime.getTime() + 5 * 60000
         );
 
-        const otpRes = await fetch(`${SERVER_URL}/sendOTP`, {
+        const otpRes = await apiFetch(`${SERVER_URL}/sendOTP`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

@@ -6,6 +6,7 @@ import ClientDetailsPanel from "../client/ClientDetailsPanel";
 import AddClientModal from "../client/AddClientModal";
 import EditClientAsNewModal from "../client/EditClientAsNewModal";
 import * as XLSX from "xlsx";
+import { apiFetch } from "../lib/apiFetch";
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -18,7 +19,7 @@ const formatDate = (value) => {
   });
 };
 
-const ClientRosterPage = () => {
+const ClientRosterPage = ({ user }) => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -33,17 +34,32 @@ const ClientRosterPage = () => {
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
 
   // 👉 NEW: sort mode (default A-Z)
-  const [sortMode, setSortMode] = useState("alpha-asc"); // "alpha-asc" | "alpha-desc" | "date-asc" | "date-desc"
   const [searchTerm, setSearchTerm] = useState("");
+  const [sortConfig, setSortConfig] = useState({
+    key: "effectiveDate", // default
+    direction: "desc",    // newest first
+  });
 
-  const [sortDateMode, setSortDateMode] = useState("none"); // "none" | "oldest" | "newest"
-  const [sortAlphaMode, setSortAlphaMode] = useState("asc"); // "asc" | "desc"  (default A–Z)
-  const [lastSortKey, setLastSortKey] = useState("alpha"); // "alpha" | "date"
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
 
   const fetchRoster = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${SERVER_URL}/api/client-roster`);
+
+      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, 
+        {
+          method: "GET",
+        });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to fetch roster.");
@@ -146,54 +162,45 @@ const ClientRosterPage = () => {
     });
 
     const sorted = [...filtered].sort((a, b) => {
-      const idA = Number(a.ID) || 0;
-      const idB = Number(b.ID) || 0;
-      const nameA = (a.ACCOUNT || "").toLowerCase();
-      const nameB = (b.ACCOUNT || "").toLowerCase();
+      const dir = sortConfig.direction === "asc" ? 1 : -1;
 
-      // Helper: compare by date/ID
-      const compareDate = () => {
-        if (sortDateMode === "none") return 0;
-        if (idA === idB) return 0;
-        return sortDateMode === "oldest" ? idA - idB : idB - idA;
-      };
-
-      // Helper: compare by client name (A–Z / Z–A)
-      const compareAlpha = () => {
-        if (nameA < nameB) return sortAlphaMode === "asc" ? -1 : 1;
-        if (nameA > nameB) return sortAlphaMode === "asc" ? 1 : -1;
-        return 0;
-      };
-
-      // Decide which is primary based on lastSortKey
-      let primaryCompare = compareAlpha;
-      let secondaryCompare = compareDate;
-
-      // If last action was date sort and a date mode is active, make date primary
-      if (lastSortKey === "date" && sortDateMode !== "none") {
-        primaryCompare = compareDate;
-        secondaryCompare = compareAlpha;
+      if (sortConfig.key === "client") {
+        const aVal = (a.ACCOUNT || "").toLowerCase();
+        const bVal = (b.ACCOUNT || "").toLowerCase();
+        return aVal.localeCompare(bVal) * dir;
       }
 
-      let result = primaryCompare();
-      if (result !== 0) return result;
+      if (sortConfig.key === "effectiveDate") {
+        const aDate = new Date(a.EFFECTIVEDATE || 0).getTime();
+        const bDate = new Date(b.EFFECTIVEDATE || 0).getTime();
 
-      return secondaryCompare();
+        if (aDate !== bDate) {
+          return (aDate - bDate) * dir;
+        }
+
+        // 🔥 fallback to ID if same date
+        return ((Number(a.ID) || 0) - (Number(b.ID) || 0)) * dir;
+      }
+
+      if (sortConfig.key === "status") {
+        const aVal = (a.STATUS || "").toLowerCase();
+        const bVal = (b.STATUS || "").toLowerCase();
+        return aVal.localeCompare(bVal) * dir;
+      }
+
+      return 0;
     });
-
     return sorted;
-  }, [
-    clients,
-    segment,
-    tagFilter,
-    accountMgrFilter,
-    statusFilter,
-    siteFilter,
-    searchTerm,
-    sortDateMode,
-    sortAlphaMode,
-    lastSortKey,
-  ]);
+    }, [
+      clients,
+      segment,
+      tagFilter,
+      accountMgrFilter,
+      statusFilter,
+      siteFilter,
+      searchTerm,
+      sortConfig,
+    ]);
 
   const selectedClient = useMemo(
     () => filteredClients.find((c) => c.ID === selectedClientId) || null,
@@ -359,7 +366,7 @@ const ClientRosterPage = () => {
   return (
     <div className="h-screen overflow-hidden bg-[#f5f7fa] flex flex-col">
       {/* Shared header */}
-      <ClientSuiteHeader />
+      <ClientSuiteHeader user={user} />
 
       {/* Main Content */}
       <main className="flex-1 flex overflow-hidden mb-2">
@@ -443,12 +450,14 @@ const ClientRosterPage = () => {
               <div className="flex gap-1.5 text-[11px]">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSortDateMode("oldest");
-                    setLastSortKey("date");
-                  }}
+                  onClick={() =>
+                    setSortConfig({
+                      key: "effectiveDate",
+                      direction: "asc",
+                    })
+                  }
                   className={`flex-1 px-2 py-1 rounded-full border ${
-                    sortDateMode === "oldest"
+                    sortConfig.key === "effectiveDate" && sortConfig.direction === "asc"
                       ? "bg-[#003b5c] text-white border-[#003b5c]"
                       : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                   }`}
@@ -458,52 +467,19 @@ const ClientRosterPage = () => {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setSortDateMode("newest");
-                    setLastSortKey("date");
-                  }}
+                    onClick={() =>
+                    setSortConfig({
+                      key: "effectiveDate",
+                      direction: "desc",
+                    })
+                  }
                   className={`flex-1 px-2 py-1 rounded-full border ${
-                    sortDateMode === "newest"
+                    sortConfig.key === "effectiveDate" && sortConfig.direction === "desc"
                       ? "bg-[#003b5c] text-white border-[#003b5c]"
                       : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                   }`}
                 >
                   Newest → Oldest
-                </button>
-              </div>
-            </div>
-
-            {/* Alpha sort toggles */}
-            <div>
-              <div className="flex gap-1.5 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSortAlphaMode("asc");
-                    setLastSortKey("alpha");
-                  }}
-                  className={`flex-1 px-2 py-1 rounded-full border ${
-                    sortAlphaMode === "asc"
-                      ? "bg-[#003b5c] text-white border-[#003b5c]"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  A–Z
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSortAlphaMode("desc");
-                    setLastSortKey("alpha");
-                  }}
-                  className={`flex-1 px-2 py-1 rounded-full border ${
-                    sortAlphaMode === "desc"
-                      ? "bg-[#003b5c] text-white border-[#003b5c]"
-                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  Z–A
                 </button>
               </div>
             </div>
@@ -622,19 +598,25 @@ const ClientRosterPage = () => {
                     <thead className="bg-gray-500 border-b border-gray-100 sticky top-0 z-10">
                       <tr>
                         {[
-                          "Client",
-                          "LOB / Task",
-                          "Status",
-                          "Live Date",
-                          "Seats",
-                          "Salesperson",
+                          { label: "Client", key: "client" },
+                          { label: "LOB / Task" },
+                          { label: "Status", key: "status" },
+                          { label: "Live Date", key: "effectiveDate" },
+                          { label: "Seats" },
+                          { label: "Salesperson" },
                         ].map((col) => (
-                          <th
-                            key={col}
-                            className="px-4 py-2 text-left font-semibold text-xs text-gray-800 uppercase tracking-wide bg-gray-50"
-                          >
-                            {col}
-                          </th>
+                        <th
+                          key={col.label}
+                          onClick={() => col.key && handleSort(col.key)}
+                          className="px-4 py-2 text-left font-semibold text-xs text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:text-[#003b5c]"
+                        >
+                          {col.label}
+                          {sortConfig.key === col.key && (
+                            <span className="ml-1">
+                              {sortConfig.direction === "asc" ? "▲" : "▼"}
+                            </span>
+                          )}
+                        </th>
                         ))}
                       </tr>
                     </thead>
@@ -681,7 +663,7 @@ const ClientRosterPage = () => {
                               </div>
                             </td>
                             <td className="px-4 py-2 text-gray-700">
-                              <div className="flex flex-col">
+                              <div className="flex flex-col max-w-[200px]">
                                 {/* <span>{row.LOB || "-"}</span> */}
                                 <span className="text-xs font-medium text-gray-900">
                                   {row.TASK || "-"}
@@ -725,23 +707,25 @@ const ClientRosterPage = () => {
           client={selectedClient}
           onNotesUpdated={handleNotesUpdated}
           onEditAsNew={openEditAsNew}
+          onRefresh={fetchRoster}
         />
 
         <AddClientModal
           isOpen={isAddClientOpen}
-          onClose={() => setIsAddClientOpen(false)}
-          onSave={async () => {
-            await fetchRoster();
+          onClose={() => {
+            setIsAddClientOpen(false);
+            fetchRoster(); // 🔥 refresh here
           }}
+          onSave={() => {}} // no-op
         />
 
         <EditClientAsNewModal
           isOpen={showEditAsNewModal}
-          onClose={() => setShowEditAsNewModal(false)}
-          onSave={async () => {
+          onClose={() => {
             setShowEditAsNewModal(false);
-            await fetchRoster(); // refresh with latest
+            fetchRoster(); // 🔥 single refresh source
           }}
+          onSave={() => {}} // no-op
           client={selectedClient}
         />
       </main>

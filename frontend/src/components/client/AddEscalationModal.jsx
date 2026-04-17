@@ -2,12 +2,17 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { SERVER_URL } from "../lib/constants";
 
+axios.defaults.withCredentials = true;
+
 const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
   const [accounts, setAccounts] = useState([]);
   const [oicOptions, setOicOptions] = useState([]);
   const [lobOptions, setLobOptions] = useState([]);
   const [taskOptions, setTaskOptions] = useState([]);
-  const [file, setFile] = useState(null);
+
+  const [files, setFiles] = useState([]);
+  const [fileKey, setFileKey] = useState(Date.now());
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [maxId, setMaxId] = useState(1);
@@ -15,7 +20,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
   const [submitStatus, setSubmitStatus] = useState("idle");
   const [submitMessage, setSubmitMessage] = useState("");
 
-  const [formData, setFormData] = useState({
+  const initialForm = {
     escalationID: "",
     escalationDate: new Date().toISOString().split("T")[0],
     account: "",
@@ -30,21 +35,32 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
     oicEmail: "",
     accountCode: "",
     clientCategory: "",
-  });
+  };
+
+  const [formData, setFormData] = useState(initialForm);
+
+  const resetForm = () => {
+    setFormData(initialForm);
+    setFiles([]);
+    setFileKey(Date.now()); // 🔥 reset file input
+    setLobOptions([]);
+    setTaskOptions([]);
+  };
 
   const handleResultAction = () => {
     if (submitStatus === "success") {
+      resetForm();
       onSuccess?.();
       onClose();
     } else {
-      setSubmitStatus("idle");
+      setSubmitStatus("idle"); // go back to form
     }
   };
 
   useEffect(() => {
     if (!isOpen) return;
 
-    // Reset modal state when opened
+    resetForm();
     setSubmitStatus("idle");
     setSubmitMessage("");
     setError("");
@@ -60,8 +76,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
 
         setOicOptions(oicRes.data || []);
         setAccounts(accRes.data || []);
-        const max = idRes.data?.maxId || 0;
-        setMaxId(max);
+        setMaxId(idRes.data?.maxId || 0);
       } catch (err) {
         console.error("Failed to load form data", err);
         setError("Failed to load form data.");
@@ -70,79 +85,6 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
 
     loadFormData();
   }, [isOpen]);
-
-  useEffect(() => {
-    if (formData.account) {
-      const filteredLobs = accounts
-        .filter((a) => normalizeAccount(a.ACCOUNT) === formData.account)
-        .map((a) => a.LOB)
-        .filter((lob, i, self) => lob && self.indexOf(lob) === i);
-      setLobOptions(filteredLobs);
-      setFormData((prev) => ({
-        ...prev,
-        lob: "",
-        task: "",
-        site: "",
-        accountCode: "",
-      }));
-    }
-  }, [formData.account]);
-
-  useEffect(() => {
-    if (formData.lob) {
-      const filteredTasks = accounts
-        .filter(
-          (a) =>
-            normalizeAccount(a.ACCOUNT) === formData.account &&
-            a.LOB === formData.lob,
-        )
-        .map((a) => a.TASK)
-        .filter((task, i, self) => task && self.indexOf(task) === i);
-      setTaskOptions(filteredTasks);
-      setFormData((prev) => ({ ...prev, task: "", site: "", accountCode: "" }));
-    }
-  }, [formData.lob]);
-
-  useEffect(() => {
-    if (formData.account && formData.lob && formData.task) {
-      const matched = accounts.find(
-        (a) =>
-          normalizeAccount(a.ACCOUNT) === formData.account &&
-          a.LOB === formData.lob &&
-          a.TASK === formData.task,
-      );
-
-      if (matched) {
-        setFormData((prev) => ({
-          ...prev,
-          site: matched.SITE || "",
-          accountCode: matched.ACCOUNTCODE || "",
-        }));
-      } else {
-        setFormData((prev) => ({ ...prev, site: "", accountCode: "" }));
-      }
-    }
-  }, [formData.account, formData.lob, formData.task]);
-
-  useEffect(() => {
-    const { site, account, task, escalationDate } = formData;
-    if (site && account && task && escalationDate && maxId) {
-      const sitePrefix = site.substring(0, 2).toUpperCase();
-      const accountPrefix = account.substring(0, 1).toUpperCase();
-      const taskPrefix = task.substring(0, 2).toUpperCase();
-      const [year, month] = escalationDate.split("-");
-      const yearShort = year.substring(2);
-      const formattedId = String(maxId + 1).padStart(3, "0");
-      const generatedId = `${sitePrefix}-${accountPrefix}${taskPrefix}-${yearShort}${month}-${formattedId}`;
-      setFormData((prev) => ({ ...prev, escalationID: generatedId }));
-    }
-  }, [
-    formData.site,
-    formData.account,
-    formData.task,
-    formData.escalationDate,
-    maxId,
-  ]);
 
   const normalizeAccount = (acc) =>
     acc?.trim().replace(/\s+/g, " ").toUpperCase();
@@ -159,8 +101,132 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
     setFormData(updated);
   };
 
+  useEffect(() => {
+    if (!formData.account || accounts.length === 0) return;
+
+    const filteredLobs = accounts
+      .filter(
+        (a) =>
+          normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account)
+      )
+      .map((a) => a.LOB)
+      .filter((lob, i, self) => lob && self.indexOf(lob) === i);
+
+    setLobOptions(filteredLobs);
+
+    setFormData((prev) => ({
+      ...prev,
+      lob: "",
+      task: "",
+      site: "",
+      accountCode: "",
+    }));
+  }, [formData.account, accounts]);
+
+  useEffect(() => {
+    if (!formData.lob || accounts.length === 0) return;
+
+    const filteredTasks = accounts
+      .filter(
+        (a) =>
+          normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account) &&
+          a.LOB === formData.lob
+      )
+      .map((a) => a.TASK)
+      .filter((task, i, self) => task && self.indexOf(task) === i);
+
+    setTaskOptions(filteredTasks);
+
+    setFormData((prev) => ({
+      ...prev,
+      task: "",
+      site: "",
+      accountCode: "",
+    }));
+  }, [formData.lob, accounts]);
+
+
+  useEffect(() => {
+    if (!formData.account || !formData.lob || !formData.task) return;
+
+    const matched = accounts.find(
+      (a) =>
+        normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account) &&
+        a.LOB === formData.lob &&
+        a.TASK === formData.task
+    );
+
+    if (matched) {
+      setFormData((prev) => ({
+        ...prev,
+        site: matched.SITE || "",
+        accountCode: matched.ACCOUNTCODE || "",
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        site: "",
+        accountCode: "",
+      }));
+    }
+  }, [formData.account, formData.lob, formData.task, accounts]);
+
+
+
+  useEffect(() => {
+    const { site, account, task, escalationDate } = formData;
+
+    if (!site || !account || !task || !escalationDate || !maxId) return;
+
+    const sitePrefix = site.substring(0, 2).toUpperCase();
+    const accountPrefix = account.substring(0, 1).toUpperCase();
+    const taskPrefix = task.substring(0, 2).toUpperCase();
+
+    const [year, month] = escalationDate.split("-");
+    const yearShort = year.substring(2);
+
+    const formattedId = String(maxId + 1).padStart(3, "0");
+
+    const generatedId = `${sitePrefix}-${accountPrefix}${taskPrefix}-${yearShort}${month}-${formattedId}`;
+
+    setFormData((prev) => ({
+      ...prev,
+      escalationID: generatedId,
+    }));
+  }, [
+    formData.site,
+    formData.account,
+    formData.task,
+    formData.escalationDate,
+    maxId,
+  ]);
+
+
   const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
+    const selectedFiles = Array.from(e.target.files);
+
+    const allowed = [
+      "image/png",
+      "image/jpeg",
+      "image/jpg",
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ];
+
+    const validFiles = selectedFiles.filter((file) => {
+      const ext = file.name.toLowerCase().split(".").pop();
+      return (
+        allowed.includes(file.type) ||
+        ["docx", "xlsx"].includes(ext)
+      );
+    });
+
+    if (validFiles.length !== selectedFiles.length) {
+      alert("Some files were skipped. Only PNG, JPG, PDF, DOCX, XLSX allowed.");
+    }
+
+    setFiles(validFiles);
   };
 
   const handleSubmit = async (e) => {
@@ -178,6 +244,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
       "escalationDetails",
       "oic",
     ];
+
     const missing = requiredFields.filter((f) => !formData[f]);
 
     if (missing.length > 0) {
@@ -190,33 +257,36 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
 
     try {
       const submission = new FormData();
+
       Object.entries(formData).forEach(([key, value]) => {
         submission.append(key, value || "");
       });
 
-      if (file) {
-        submission.append("file", file);
-      }
+      files.forEach((file) => {
+        submission.append("files", file);
+      });
 
       const res = await axios.post(
         `${SERVER_URL}/api/add-escalation`,
-        submission,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        },
+        submission
       );
 
-      if (res.data.success) {
-        setSubmitStatus("success");
-        setSubmitMessage("Escalation successfully saved.");
-      } else {
-        setSubmitStatus("error");
-        setSubmitMessage("Submission failed.");
-      }
+    if (res.data.success) {
+      setSubmitStatus("success");
+      setSubmitMessage("Escalation successfully saved.");
+    } else {
+      setSubmitStatus("error");
+      setSubmitMessage("Submission failed. Please try again.");
+    }
     } catch (err) {
       console.error("Error submitting escalation:", err);
+
+      setSaving(false); // 🔥 ADD THIS HERE (important)
+
       setSubmitStatus("error");
-      setSubmitMessage("Submission failed. Try again.");
+      setSubmitMessage(
+        err.response?.data?.error || "Submission failed. Please try again."
+      );
     } finally {
       setSaving(false);
     }
@@ -230,12 +300,11 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
         <h2 className="text-sm font-semibold text-gray-800 mb-4">
           Add New Escalation
         </h2>
+
         {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
 
-        <form
-          onSubmit={handleSubmit}
-          className="grid grid-cols-2 gap-4 text-xs"
-        >
+        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 text-xs">
+
           <div>
             <label className="block mb-1 font-medium">Escalation ID</label>
             <input
@@ -284,9 +353,9 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
               {[...new Set(accounts.map((a) => normalizeAccount(a.ACCOUNT)))]
                 .sort()
                 .map((acc) => (
-                  <option key={acc} value={acc}>
-                    {acc}
-                  </option>
+                <option key={acc} value={normalizeAccount(acc)}>
+                  {acc}
+                </option>
                 ))}
             </select>
           </div>
@@ -415,10 +484,51 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
             <label className="block mb-1 font-medium">
               Attachment (optional)
             </label>
-            <input type="file" onChange={handleFileChange} />
+
+            <input
+              key={fileKey}
+              type="file"
+              multiple
+              accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.xlsx"
+              onChange={handleFileChange}
+            />
+            {files && files.length > 0 && (
+              <div className="mt-2 text-[11px] text-gray-600 space-y-1">
+                {files.map((f, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded"
+                  >
+                    <span className="truncate">📎 {f.name}</span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFiles(files.filter((_, i) => i !== idx))
+                      }
+                      className="text-red-500 hover:text-red-700 text-[10px] ml-2"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="col-span-2 flex justify-end items-center gap-2 mt-2">
+
+
+          <div className="col-span-2 flex justify-end gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => {
+                resetForm(); // 🔥 manual reset button behavior
+              }}
+              className="px-4 py-1.5 text-xs rounded bg-gray-200 hover:bg-gray-300"
+            >
+              Reset
+            </button>
+
             <button
               type="button"
               onClick={onClose}
@@ -426,6 +536,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
             >
               Cancel
             </button>
+
             <button
               type="submit"
               disabled={saving}
@@ -435,55 +546,62 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
             </button>
           </div>
         </form>
+      </div>
 
-        {/* ✅ Feedback Modal */}
-        {submitStatus !== "idle" && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                    submitStatus === "success" ? "bg-emerald-100" : "bg-red-100"
-                  }`}
-                >
-                  {submitStatus === "success" ? (
-                    <span className="text-lg text-emerald-700 animate-bounce">
-                      ✔
-                    </span>
-                  ) : (
-                    <span className="text-lg text-red-700 animate-[shake_0.3s_ease-in-out_2]">
-                      !
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    {submitStatus === "success"
-                      ? "Escalation Saved"
-                      : "Unable to Save"}
-                  </h3>
-                  <p className="text-[11px] text-gray-600 mt-0.5">
-                    {submitMessage}
-                  </p>
-                </div>
+      {/* ✅ Result Modal (Add Escalation) */}
+      {submitStatus !== "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                  submitStatus === "success"
+                    ? "bg-emerald-100"
+                    : "bg-red-100"
+                }`}
+              >
+                {submitStatus === "success" ? (
+                  <span className="text-lg text-emerald-700 animate-bounce">
+                    ✔
+                  </span>
+                ) : (
+                  <span className="text-lg text-red-700 animate-[shake_0.3s_ease-in-out_2]">
+                    !
+                  </span>
+                )}
               </div>
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleResultAction}
-                  className={`h-8 px-4 rounded-lg text-[11px] font-medium ${
-                    submitStatus === "success"
-                      ? "bg-[#003b5c] text-white hover:bg-[#002a40]"
-                      : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {submitStatus === "success" ? "Close" : "Back"}
-                </button>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  {submitStatus === "success"
+                    ? "Submission Successful"
+                    : "Submission Failed"}
+                </h3>
+
+                <p className="text-[11px] text-gray-600 mt-0.5">
+                  {submitMessage}
+                </p>
               </div>
             </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleResultAction}
+                className={`h-8 px-4 rounded-lg text-[11px] font-medium ${
+                  submitStatus === "success"
+                    ? "bg-[#003b5c] text-white hover:bg-[#002a40]"
+                    : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {submitStatus === "success" ? "Close" : "Retry"}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
     </div>
   );
 };

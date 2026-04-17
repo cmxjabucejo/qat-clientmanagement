@@ -1,7 +1,7 @@
 // src/components/client/ClientDetailsPanel.jsx
 import React, { useState } from "react";
 import { SERVER_URL } from "../lib/constants";
-
+import { apiFetch } from "../lib/apiFetch";
 
 
 const formatDate = (value) => {
@@ -27,7 +27,7 @@ const getOtherFees = (client) => {
   return extra + phone;
 };
 
-const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
+const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew, onRefresh }) => {
   const [activeTab, setActiveTab] = useState("Profile");
 
   // Add Notes modal state
@@ -89,7 +89,7 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
         localStorage.getItem("lastName") ||
         "";
 
-      const res = await fetch(
+      const res = await apiFetch(
         `${SERVER_URL}/api/client-roster/${client.ID}/notes`,
         {
           method: "PUT",
@@ -113,6 +113,10 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
         onNotesUpdated(client.ID, data.notes);
       }
 
+      if (onRefresh) {
+        onRefresh(); // 🔥 refresh entire roster
+      }
+
       setShowNotesModal(false);
       setNoteText("");
     } catch (err) {
@@ -131,8 +135,11 @@ const ClientDetailsPanel = ({ client, onNotesUpdated, onEditAsNew }) => {
         key = file.split(".com/")[1];
       }
 
-      const res = await fetch(
-        `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`
+      const res = await apiFetch(
+        `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`,
+        {
+          method: "GET",
+        }
       );
 
       const data = await res.json();

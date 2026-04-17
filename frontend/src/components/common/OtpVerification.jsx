@@ -1,200 +1,349 @@
-import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { SERVER_URL } from "../lib/constants";
-import bcrypt from "bcryptjs";
-import UserService from "../../service/UserService";
 import pkg from "../../../package.json";
+import { apiFetch } from "../lib/apiFetch";
 
 const OtpVerification = () => {
-  const navigate = useNavigate();
+  const otpRef = useRef(null);
   const location = useLocation();
   const APP_VERSION = pkg.version;
-
-  const emailAddress =
-    location.state?.emailAddress || localStorage.getItem("pendingEmail");
-
-  const requestedDateTime =
-    location.state?.requestedDateTime ||
-    localStorage.getItem("pendingRequestedAt");
-  const expiryDateTime =
-    location.state?.expiryDateTime || localStorage.getItem("pendingExpiryAt");
-
-  // If email was passed via route state, persist it
-  if (location.state?.emailAddress) {
-    localStorage.setItem("pendingEmail", location.state.emailAddress);
-  }
 
   const [enteredOtp, setEnteredOtp] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [emailAddress, setEmailAddress] = useState("");
 
-  const handleVerifyOtp = async () => {
-    setError("");
-    setSuccess("");
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isExpired, setIsExpired] = useState(false);
 
-    if (!emailAddress) {
-      setError("Missing email. Please restart the login.");
-      return;
-    }
-    if (!enteredOtp) {
-      setError("Please enter the OTP.");
-      return;
-    }
-    if (!expiryDateTime) {
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
+  const [resendDots, setResendDots] = useState("");
+
+  /*
+  ========================================
+  ⏱ FORMATTERS
+  ========================================
+  */
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  /*
+  ========================================
+  🔁 INIT (OTP SESSION + TIMER)
+  ========================================
+  */
+  useEffect(() => {
+    const email =
+      location.state?.emailAddress || localStorage.getItem("pendingEmail");
+
+    const challengeId = localStorage.getItem("pendingChallengeId");
+    const expiry = localStorage.getItem("pendingExpiryAt");
+
+    if (!email || !challengeId || !expiry) {
       setError("Session expired. Please request a new OTP.");
       return;
     }
 
-    const now = new Date();
-    const expiry = new Date(expiryDateTime);
-    if (isNaN(expiry.getTime())) {
-      setError("Invalid OTP session. Please request a new OTP.");
-      return;
+    setEmailAddress(email);
+    localStorage.setItem("pendingEmail", email);
+
+    setError("");
+    setSuccess("");
+    setIsExpired(false);
+
+    const expiryTime = new Date(expiry).getTime();
+
+    const interval = setInterval(() => {
+      const diff = Math.floor((expiryTime - Date.now()) / 1000);
+
+      if (diff <= 0) {
+        setTimeLeft(0);
+        setIsExpired(true);
+        clearInterval(interval);
+      } else {
+        setTimeLeft(diff);
+      }
+    }, 1000);
+
+    // 🔥 INIT RESEND COOLDOWN
+    const cooldownStart = localStorage.getItem("otpCooldownStart");
+
+    if (cooldownStart) {
+      const elapsed = Math.floor((Date.now() - cooldownStart) / 1000);
+      const remaining = 60 - elapsed;
+
+      if (remaining > 0) {
+        setResendCooldown(remaining);
+      }
     }
-    if (now > expiry) {
+
+    // 🔥 AUTO-FOCUS
+    setTimeout(() => otpRef.current?.focus(), 100);
+
+    return () => clearInterval(interval);
+  }, [location.state]);
+
+  /*
+  ========================================
+  🔐 VERIFY OTP
+  ========================================
+  */
+  const handleVerifyOtp = async () => {
+    setError("");
+    setSuccess("");
+
+    if (isExpired) {
       setError("OTP has expired. Please request a new one.");
       return;
     }
 
-    const hashedOtp = localStorage.getItem("pendingOtpHashed");
-    if (!hashedOtp) {
-      setError("No OTP found. Please try again.");
+    const challengeId = localStorage.getItem("pendingChallengeId");
+
+    if (!challengeId) {
+      setError("Session expired. Please request a new OTP.");
       return;
     }
 
-    const isMatch = await bcrypt.compare(enteredOtp, hashedOtp);
-    if (!isMatch) {
-      setError("Incorrect OTP. Please try again.");
+    if (!enteredOtp || enteredOtp.length !== 6) {
+      setError("Please enter a valid 6-digit OTP.");
       return;
     }
-
-    setSuccess("OTP verified successfully!");
-    localStorage.removeItem("pendingOtpHashed");
 
     try {
-      // ✅ Existing-user-only flow: get the pending user from UserService
-      const pendingUser = UserService.getPendingUser?.();
-
-      if (!pendingUser) {
-        setError(
-          "User session data is missing. Please start the login process again."
-        );
-        return;
-      }
-
-      const {
-        userid,
-        userEmail,
-        firstName,
-        lastName,
-        fullName,
-        userLevel,
-        userStatus,
-      } = pendingUser;
-
-      // Optional: second-layer check for active status
-      if (userStatus && userStatus.toLowerCase() !== "active") {
-        setError("This account is not active. Please contact your administrator.");
-        return;
-      }
-
-      // ✅ Finalize login for existing user
-      UserService.loginUser({
-        userId: userid,
-        email: userEmail || emailAddress,
-        firstname: firstName || fullName || "",
-        lastname: lastName || "",
-        providerId: emailAddress,
-        userLevel,
-        userStatus,
+      const res = await apiFetch(`${SERVER_URL}/api/verifyOTP`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          challengeId,
+          otp: enteredOtp,
+        }),
       });
-      
-      // Cleanup OTP-related state
+
+      if (!res) return;
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.message || "Invalid OTP");
+        return;
+      }
+
+      setSuccess("OTP verified successfully!");
+
+      // 🔥 CLEANUP
+      localStorage.removeItem("pendingChallengeId");
       localStorage.removeItem("pendingEmail");
-      localStorage.removeItem("pendingRequestedAt");
       localStorage.removeItem("pendingExpiryAt");
+      localStorage.removeItem("otpCooldownStart");
 
-      // Optional: clear pendingUser via service if implemented
-      if (UserService.clearPendingUser) {
-        UserService.clearPendingUser();
-      }
+      // 🔥 HARD REDIRECT → triggers session check
+      setTimeout(() => {
+        window.location.href = "/ClientEscalations";
+      }, 400);
 
-      // Redirect to main app
-      navigate("/ClientRoster", {
-        replace: true,
-      });
     } catch (err) {
-      console.error("❌ OTP Verification Error:", err);
-      setError("Could not complete verification. Please try again.");
+      console.error(err);
+      setError("Could not verify OTP. Please try again.");
     }
   };
 
+  /*
+  ========================================
+  🔁 RESEND OTP
+  ========================================
+  */
+  const handleResendOtp = async () => {
+    // 🚫 HARD BLOCK (THIS WAS MISSING)
+    if (isResending || resendCooldown > 0) return;
+
+    setError("");
+    setSuccess("");
+    setIsResending(true);
+
+    const email = localStorage.getItem("pendingEmail");
+
+    if (!email) {
+      setError("Session expired. Please restart login.");
+      setIsResending(false);
+      return;
+    }
+
+    try {
+      console.log("🔥 RESEND OTP CALLED"); // DEBUG
+
+      const res = await apiFetch(`${SERVER_URL}/api/sendOTP`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ emailAddress: email }),
+      });
+
+      if (!res) return;
+
+      if (res.status === 429) {
+        const data = await res.json();
+        setError(data.message || "Too many requests. Please wait.");
+        setResendCooldown(60);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.message || "Failed to resend OTP.");
+        return;
+      }
+
+      // ✅ SUCCESS FLOW
+      setEnteredOtp("");
+      localStorage.setItem("pendingChallengeId", data.challengeId);
+      localStorage.setItem("pendingExpiryAt", data.expiresAt);
+      localStorage.setItem("otpCooldownStart", Date.now());
+
+      const expiryTime = new Date(data.expiresAt).getTime();
+      setTimeLeft(Math.floor((expiryTime - Date.now()) / 1000));
+      setIsExpired(false);
+
+      setResendCooldown(60);
+      setSuccess("A new OTP has been sent.");
+
+      setTimeout(() => otpRef.current?.focus(), 150);
+
+    } catch (err) {
+      console.error(err);
+      setError("Could not resend OTP.");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  /*
+  ========================================
+  ⏳ COOLDOWN TIMER
+  ========================================
+  */
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  /*
+  ========================================
+  ✨ DOTS ANIMATION
+  ========================================
+  */
+  useEffect(() => {
+    if (!isResending) {
+      setResendDots("");
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setResendDots((prev) =>
+        prev.length >= 3 ? "" : prev + "."
+      );
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [isResending]);
+
+  /*
+  ========================================
+  UI
+  ========================================
+  */
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-[#061326]">
-      {/* Glow accent behind card */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="w-72 h-72 bg-[#00a1c9]/15 rounded-full blur-3xl absolute -top-16 -left-10" />
-        <div className="w-72 h-72 bg-[#f58220]/10 rounded-full blur-3xl absolute bottom-0 right-0" />
-      </div>
-
       <div className="relative w-full max-w-md">
-        <div className="bg-white/10 border border-white/30 backdrop-blur-lg text-white px-10 py-7 md:px-10 md:py-7 rounded-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.37)] w-full max-w-sm">
-          <h2 className="text-lg font-bold text-white mb-4">Verify OTP</h2>
+        <div className="bg-white/10 border border-white/30 backdrop-blur-lg text-white px-10 py-7 rounded-xl w-full">
 
-          <p className="text-sm mb-4 text-white/80">
-            An OTP has been sent to <strong>{emailAddress}</strong>. Please enter
-            it below to sign in.
+          <h2 className="text-lg font-bold text-center mb-1">
+            Client Management Suite
+          </h2>
+
+          <h3 className="text-md font-semibold text-center mb-4">
+            OTP Verification
+          </h3>
+
+          <p className="text-sm text-left mb-4 leading-relaxed text-white/90">
+            An OTP has been sent to{" "}
+            <span className="font-semibold text-white">
+              {emailAddress}
+            </span>
+            . Please enter it below to sign in.
           </p>
 
           <input
+            ref={otpRef}
             type="text"
-            placeholder="- - - - - -"
             maxLength={6}
             value={enteredOtp}
-            onChange={(e) => {
-              setEnteredOtp(e.target.value);
-              if (error || success) {
-                setError("");
-                setSuccess("");
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleVerifyOtp();
-              }
-            }}
-            className="w-full border border-white/20 bg-white/10 text-white px-3 py-2 rounded text-center text-lg tracking-widest placeholder-white/50 focus:outline-none"
+            onChange={(e) =>
+              setEnteredOtp(e.target.value.replace(/\D/g, ""))
+            }
+            placeholder="- - - - - -"
+            className="w-full text-center text-lg tracking-[0.6em] bg-white/10 border border-white/20 px-3 py-3 rounded text-white placeholder-white/50"
           />
 
-          {error && (
-            <p className="text-red-400 text-sm mt-2 text-center bg-white/10 rounded py-1 px-2">
-              {error}
-            </p>
-          )}
-          {success && (
-            <p className="text-green-400 text-sm mt-2 text-center bg-white/10 rounded py-1 px-2">
-              {success}
-            </p>
-          )}
+          <div className="text-center mt-3 text-sm">
+            {isExpired ? (
+              resendCooldown > 0 ? (
+                <span className="text-gray-400">
+                  Resend in {formatTime(resendCooldown)}
+                </span>
+              ) : (
+                <button
+                  onClick={handleResendOtp}
+                  disabled={isResending || resendCooldown > 0}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isResending
+                    ? `Resending${resendDots}`
+                    : "Request new OTP"}
+                </button>
+              )
+            ) : (
+              <span className="text-yellow-300">
+                Expires in {formatTime(timeLeft)}
+              </span>
+            )}
+          </div>
+
+          {error && <p className="text-red-400 text-center mt-2">{error}</p>}
+          {success && <p className="text-green-400 text-center mt-2">{success}</p>}
 
           <button
             onClick={handleVerifyOtp}
-            className="w-full mt-4 bg-[#0084a4] hover:bg-[#015368] text-white py-2 rounded"
+            disabled={isExpired}
+            className="w-full mt-4 py-2 bg-[#0084a4] rounded"
           >
             Verify OTP
           </button>
         </div>
       </div>
-      
-      <div className="absolute bottom-2 left-0 w-full px-4">
-        <p className="text-[10px] text-white text-center">
-          © 2025 CMX Client Management Suite v{APP_VERSION}
-        </p>
-        <p className="text-[10px]  text-white text-center">
-          DREAM Dev Ops || Callmax Solutions International All Rights Reserved
-        </p>
-      </div>
 
+      <div className="absolute bottom-2 w-full text-center text-xs text-white">
+        © 2025 CMX Client Management Suite v{APP_VERSION}
+      </div>
     </div>
   );
 };
