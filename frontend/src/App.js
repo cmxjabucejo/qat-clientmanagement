@@ -105,10 +105,11 @@ export default function App() {
   ========================================
   */
   const handleExpire = useCallback(() => {
-    setSessionExpired(true);
-    setIsAuthed(false);
-    setUser(null);
-  }, []);
+      setSessionExpired(true);
+      setIsAuthed(false);
+      setUser(null);
+      setHasSession(false); // 🔥 prevent re-trigger loops
+    }, []);
 
   /*
   ========================================
@@ -136,40 +137,35 @@ export default function App() {
           if (data.success && data.user) {
             setUser(data.user);
             setIsAuthed(true);
-            setHasSession(true);              // 🔥 mark session exists
-            setSessionExpired(false);         // 🔥 no modal
+            setHasSession(true); // optional (can keep)
+            setSessionExpired(false);
             return;
           }
         }
 
-        // ❌ NO ACTIVE SESSION
-        setUser(null);
-        setIsAuthed(false);
-
-        // 🔥 ONLY show expired if user HAD a session before
-        if (hasSession && !isPublicPath) {
-          setSessionExpired(true);
+        // ❌ INVALID / EXPIRED SESSION
+        if (!isPublicPath) {
+          handleExpire(); // 🔥 FORCE EXPIRE (single source of truth)
         } else {
-          setSessionExpired(false);
+          setUser(null);
+          setIsAuthed(false);
         }
 
       } catch (err) {
         console.error("Session check failed:", err);
 
-        setUser(null);
-        setIsAuthed(false);
-
-        // 🔥 SAME LOGIC HERE
-        if (hasSession && !isPublicPath) {
-          setSessionExpired(true);
+        // 🔥 ALWAYS EXPIRE on failure (safe default)
+        if (!isPublicPath) {
+          handleExpire();
         } else {
-          setSessionExpired(false);
+          setUser(null);
+          setIsAuthed(false);
         }
       }
     };
 
     checkSession();
-  }, [location.pathname, hasSession]);
+  }, [location.pathname, handleExpire]);
 
   /*
   ========================================
