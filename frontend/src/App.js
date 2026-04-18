@@ -88,6 +88,7 @@ export default function App() {
   const [isAuthed, setIsAuthed] = useState(null);
   const [user, setUser] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [hasSession, setHasSession] = useState(false);
 
   /*
   ========================================
@@ -114,10 +115,10 @@ export default function App() {
   🔍 SESSION CHECK
   ========================================
   */
-
-
-
   useEffect(() => {
+    const publicPaths = ["/", "/OauthLogin", "/Register", "/OTP-SECURE"];
+    const isPublicPath = publicPaths.includes(location.pathname);
+
     const checkSession = async () => {
       try {
         const res = await fetch(`${SERVER_URL}/api/session`, {
@@ -126,22 +127,49 @@ export default function App() {
           cache: "no-store",
         });
 
-        const data = await res.json();
+        const contentType = res.headers.get("content-type") || "";
 
-        if (res.ok && data.success && data.user) {
-          setUser(data.user);
-          setIsAuthed(true);
-        } else {
-          handleExpire(); // 🔥 FORCE LOGOUT
+        // ✅ VALID SESSION
+        if (res.ok && contentType.includes("application/json")) {
+          const data = await res.json();
+
+          if (data.success && data.user) {
+            setUser(data.user);
+            setIsAuthed(true);
+            setHasSession(true);              // 🔥 mark session exists
+            setSessionExpired(false);         // 🔥 no modal
+            return;
+          }
         }
+
+        // ❌ NO ACTIVE SESSION
+        setUser(null);
+        setIsAuthed(false);
+
+        // 🔥 ONLY show expired if user HAD a session before
+        if (hasSession && !isPublicPath) {
+          setSessionExpired(true);
+        } else {
+          setSessionExpired(false);
+        }
+
       } catch (err) {
         console.error("Session check failed:", err);
-        handleExpire(); // 🔥 FORCE LOGOUT
+
+        setUser(null);
+        setIsAuthed(false);
+
+        // 🔥 SAME LOGIC HERE
+        if (hasSession && !isPublicPath) {
+          setSessionExpired(true);
+        } else {
+          setSessionExpired(false);
+        }
       }
     };
 
     checkSession();
-  }, [location.pathname]); // 🔥 KEY CHANGE
+  }, [location.pathname, hasSession]);
 
   /*
   ========================================

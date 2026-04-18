@@ -18,7 +18,7 @@ const UpdateEscalationModal = ({
 }) => {
   const [formData, setFormData] = useState({});
   const [oicOptions, setOicOptions] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [userName, setUserName] = useState("");
@@ -150,14 +150,6 @@ const UpdateEscalationModal = ({
     });
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    setSelectedFile(file);
-    if (file) {
-      setFormData((prev) => ({ ...prev, attachment: file.name }));
-    }
-  };
-
   const validateForm = () => {
     const required = [];
 
@@ -203,8 +195,8 @@ const UpdateEscalationModal = ({
     formToSend.append("attachment", JSON.stringify(attachments));
 
     // ✅ NEW FILES
-    if (selectedFile && selectedFile.length > 0) {
-      selectedFile.forEach((file) => {
+    if (files.length > 0) {
+      files.forEach((file) => {
         formToSend.append("files", file);
       });
     }
@@ -475,18 +467,24 @@ const UpdateEscalationModal = ({
             </div>
           </div>
 
-          <div className="col-span-2 space-y-1">
+          <div className="col-span-2 space-y-2">
             <label className="block">Attachment</label>
 
+            {/* 🔵 EXISTING FILES (READ ONLY) */}
             {attachments.length > 0 && (
               <div className="space-y-1">
+                <p className="text-[11px] text-gray-500">Existing Files:</p>
+
                 {attachments.map((file, idx) => (
-                  <div key={idx}>
+                  <div
+                    key={idx}
+                    className="bg-white border px-2 py-1 rounded text-[11px]"
+                  >
                     <a
                       href={`${SERVER_URL}/api/get-file?key=${file}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 underline text-xs"
+                      className="text-blue-600 underline truncate block"
                     >
                       📎 {file.split("/").pop()}
                     </a>
@@ -495,10 +493,53 @@ const UpdateEscalationModal = ({
               </div>
             )}
 
+            {/* 🟢 NEW FILES (REMOVABLE) */}
+            {files.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] text-gray-500">New Files:</p>
+
+                <div className="text-[11px] text-gray-600 space-y-1">
+                  {files.map((f, idx) => (
+                    <div
+                      key={`${f.name}-${idx}`}
+                      className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded"
+                    >
+                      <span className="truncate">📎 {f.name}</span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiles((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="text-red-500 hover:text-red-700 text-[10px] ml-2"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 📥 FILE INPUT */}
             <input
               type="file"
               multiple
-              onChange={(e) => setSelectedFile(Array.from(e.target.files))}
+              onChange={(e) => {
+                const newFiles = Array.from(e.target.files);
+
+                // 🔥 prevent duplicates by filename
+                setFiles((prev) => {
+                  const combined = [...prev, ...newFiles];
+                  return combined.filter(
+                    (file, index, self) =>
+                      index === self.findIndex((f) => f.name === file.name)
+                  );
+                });
+
+                // 🔥 reset input so same file can be re-selected if removed
+                e.target.value = "";
+              }}
               disabled={isClosed}
               className="mt-1"
             />
