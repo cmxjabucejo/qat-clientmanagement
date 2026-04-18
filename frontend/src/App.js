@@ -104,12 +104,21 @@ export default function App() {
   🔒 EXPIRE
   ========================================
   */
-  const handleExpire = useCallback(() => {
-      setSessionExpired(true);
-      setIsAuthed(false);
-      setUser(null);
-      setHasSession(false); // 🔥 prevent re-trigger loops
-    }, []);
+  const handleExpire = useCallback(async () => {
+    try {
+      await fetch(`${SERVER_URL}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (e) {}
+
+    setSessionExpired(true);
+    setIsAuthed(false);
+    setUser(null);
+    setHasSession(false);
+
+    window.__SESSION_EXPIRED__ = true;
+  }, []);
 
   /*
   ========================================
@@ -138,7 +147,6 @@ export default function App() {
             setUser(data.user);
             setIsAuthed(true);
             setHasSession(true); // optional (can keep)
-            setSessionExpired(false);
             return;
           }
         }
@@ -163,6 +171,8 @@ export default function App() {
         }
       }
     };
+
+    if (window.__SESSION_EXPIRED__) return;
 
     checkSession();
   }, [location.pathname, handleExpire]);
