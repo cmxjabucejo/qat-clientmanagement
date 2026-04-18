@@ -149,9 +149,12 @@ async function startServer() {
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
       }),
-      windowMs: 60 * 1000,
-      max: 50,
-      keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
+      windowMs: 10 * 60 * 1000, // 10 minutes
+      max: 5,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) =>
+        `${req.body?.emailAddress || "noemail"}_${req.ip}`,
     });
 
     const generalLimiter = rateLimit({
@@ -159,7 +162,21 @@ async function startServer() {
         sendCommand: (...args) => redisClient.sendCommand(args),
       }),
       windowMs: 15 * 60 * 1000,
-      max: 300,
+      max: 150,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) =>
+        req.session?.user?.id || rateLimit.ipKeyGenerator(req),
+    });
+
+    const uploadLimiter = rateLimit({
+      store: new RateLimitRedisStore({
+        sendCommand: (...args) => redisClient.sendCommand(args),
+      }),
+      windowMs: 15 * 60 * 1000,
+      max: 20, // lower for uploads
+      standardHeaders: true,
+      legacyHeaders: false,
       keyGenerator: (req) =>
         req.session?.user?.id || rateLimit.ipKeyGenerator(req),
     });
@@ -180,11 +197,12 @@ async function startServer() {
     app.use("/api", (req, res, next) => {
       const contentType = req.headers["content-type"] || "";
 
-      // 🚫 completely skip BOTH limiter AND json parsing path
+      // 📦 If multipart (form + upload)
       if (contentType.startsWith("multipart/form-data")) {
-        return next();
+        return uploadLimiter(req, res, next); // ✅ NOT bypass
       }
 
+      // 🔐 Everything else
       return generalLimiter(req, res, next);
     });
 
