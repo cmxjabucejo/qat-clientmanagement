@@ -1,3 +1,5 @@
+
+
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -45,6 +47,7 @@ AWS.config.update({
 ========================================
 */
 const app = express();
+app.set("trust proxy", 1);
 const PORT = process.env.SERVER_PORT || 5005;
 
 /*
@@ -80,18 +83,10 @@ app.use(
 ========================================
 🔥 BODY PARSER (CRITICAL FIX)
 ========================================
-// */
-// app.use((req, res, next) => {
-//   const contentType = req.headers["content-type"] || "";
+*/
 
-//   // 🚫 Skip JSON parsing for file uploads
-//   if (contentType.startsWith("multipart/form-data")) {
-//     return next();
-//   }
-
-//   express.json({ limit: "1mb" })(req, res, next);
-// });
-// app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 /*
 ========================================
@@ -129,22 +124,21 @@ async function startServer() {
       prefix: "cmx:",
     });
 
-    app.use(
-      session({
-        name: process.env.SESSION_NAME || "cmx_cms_session",
-        secret: process.env.SESSION_SECRET || "super-secret-key",
-        store: redisStore,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-          httpOnly: true,
-          secure: false,
-          sameSite: "lax",
-          maxAge: 1000 * 60 * 60 * 8,
-          path: "/",
-        },
-      })
-    );
+  app.use(
+    session({
+      name: process.env.SESSION_NAME,
+      store: redisStore,
+      secret: process.env.SESSION_SECRET,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",   // OK now (same domain)
+        maxAge: 1000 * 60 * 60 * 8,
+      },
+    })
+  );
 
     /*
     ========================================
@@ -156,7 +150,7 @@ async function startServer() {
         sendCommand: (...args) => redisClient.sendCommand(args),
       }),
       windowMs: 60 * 1000,
-      max: 5,
+      max: 50,
       keyGenerator: (req) => rateLimit.ipKeyGenerator(req),
     });
 

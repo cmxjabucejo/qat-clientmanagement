@@ -216,9 +216,33 @@ router.post(
 
       await db.query(
         `UPDATE 1000_cmx_appdata_client_database.db_cmx_client_escalations
-         SET ATTACHMENT = ?
-         WHERE ESCALATIONID = ?`,
-        [JSON.stringify(finalFiles), req.body.escalationID]
+        SET 
+          VALIDITY = ?,
+          REPORTSUBMITTED = ?,
+          REPORTSUBMITTEDDATE = ?,
+          RESOLVEDDATE = ?,
+          ACTIONTAKEN = ?,
+          RESOLUTIONSTATUS = ?,
+          STATUS = ?,
+          OIC = ?,
+          OIC_EMAIL = ?,
+          ATTACHMENT = ?,
+          DATELASTUPDATED = ?
+        WHERE ESCALATIONID = ?`,
+        [
+          req.body.validity,
+          req.body.reportSubmitted,
+          req.body.reportSubmittedDate || null,
+          req.body.resolvedDate || null,
+          req.body.actionTaken,
+          req.body.resolutionStatus,
+          req.body.status,
+          req.body.oic,
+          req.body.oicEmail,
+          JSON.stringify(finalFiles),
+          req.body.dateLastUpdated,
+          req.body.escalationID
+        ]
       );
 
       res.json({ success: true });

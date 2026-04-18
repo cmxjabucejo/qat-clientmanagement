@@ -4,6 +4,7 @@ import axios from "axios";
 import ClientSuiteHeader from "../common/ClientSuiteHeader";
 import ClientEscalationDetailsPanel from "../client/ClientEscalationDetailsPanel";
 import AddEscalationModal from "../client/AddEscalationModal";
+import UpdateEscalationModal from "../client/UpdateEscalationModal";
 import * as XLSX from "xlsx";
 
 const ClientEscalationsPage = ({ user }) => {
@@ -21,6 +22,8 @@ const ClientEscalationsPage = ({ user }) => {
   const [selectedQuarter, setSelectedQuarter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [selectedEscalationForEdit, setSelectedEscalationForEdit] = useState(null);
   const [sortConfig, setSortConfig] = useState({
     key: "ESCALATION_DATE",
     direction: "desc",
@@ -511,6 +514,10 @@ const ClientEscalationsPage = ({ user }) => {
                             <tr
                               key={row.ID}
                               onClick={() => setSelectedEscalation(row)}
+                              onDoubleClick={() => {
+                                setSelectedEscalationForEdit(row);
+                                setShowUpdateModal(true);
+                              }}
                               className={`cursor-pointer transition
                                 hover:bg-[#e1edf5]/50
                                 ${
@@ -587,6 +594,17 @@ const ClientEscalationsPage = ({ user }) => {
             fetchEscalations(); // example refresh call
           }}
         />
+
+        <UpdateEscalationModal
+          isOpen={showUpdateModal}
+          onClose={() => setShowUpdateModal(false)}
+          escalationData={selectedEscalationForEdit}
+          onSuccess={() => {
+            setShowUpdateModal(false);
+            fetchEscalations(); // refresh table
+          }}
+        />
+
       </main>
     </div>
   );
