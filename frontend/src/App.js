@@ -18,6 +18,7 @@ import SessionExpiredModal from "./components/common/SessionExpiredModal";
 import SessionWarningModal from "./components/common/SessionWarningModal";
 import IdleWarningModal from "./components/common/IdleWarningModal";
 
+
 import useSessionTimer from "./components/lib/useSessionTimer";
 import useInactivityTimer from "./components/lib/useInactivityTimer";
 
@@ -89,6 +90,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [isExpiring, setIsExpiring] = useState(false);
 
   /*
   ========================================
@@ -195,11 +197,10 @@ export default function App() {
   ⏳ TIMERS
   ========================================
   */
-  const { showWarning, timeLeft, setShowWarning } =
-    useSessionTimer(handleExpire);
+  const { showWarning, timeLeft, resetSession } = useSessionTimer(handleExpire);
 
   const { showIdleWarning, idleTimeLeft, setShowIdleWarning } =
-    useInactivityTimer(handleExpire);
+    useInactivityTimer(handleExpire, setIsExpiring);
 
   /*
   ========================================
@@ -269,6 +270,7 @@ export default function App() {
       <SessionWarningModal
         show={showWarning && !sessionExpired}
         timeLeft={timeLeft}
+        onStayActive={resetSession}
       />
 
       <IdleWarningModal
