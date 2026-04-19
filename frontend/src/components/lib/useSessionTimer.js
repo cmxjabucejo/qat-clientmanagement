@@ -1,17 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 
 const SESSION_DURATION = 8 * 60 * 60 * 1000; // 8 hours
-const WARNING_TIME = 2 * 60 * 1000; // show warning at last 2 mins
+const WARNING_TIME = 2 * 60 * 1000; // last 2 mins
 
 export default function useSessionTimer(onExpire) {
   const [showWarning, setShowWarning] = useState(false);
   const [timeLeft, setTimeLeft] = useState(SESSION_DURATION);
 
   const lastActivityRef = useRef(Date.now());
+  const isLockedRef = useRef(false); // 🔥 LOCK
 
-  // Track user activity
+  /*
+  ========================================
+  🖱️ TRACK USER ACTIVITY
+  ========================================
+  */
   useEffect(() => {
     const updateActivity = () => {
+      // ❌ DO NOT update if already in warning state
+      if (isLockedRef.current) return;
+
       lastActivityRef.current = Date.now();
     };
 
@@ -26,7 +34,11 @@ export default function useSessionTimer(onExpire) {
     };
   }, []);
 
-  // Timer loop
+  /*
+  ========================================
+  ⏳ TIMER LOOP
+  ========================================
+  */
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
@@ -35,10 +47,13 @@ export default function useSessionTimer(onExpire) {
 
       setTimeLeft(remaining);
 
-      if (remaining <= WARNING_TIME && remaining > 0) {
+      // 🔥 TRIGGER WARNING ONCE AND LOCK
+      if (remaining <= WARNING_TIME && remaining > 0 && !isLockedRef.current) {
+        isLockedRef.current = true;   // 🔥 LOCK
         setShowWarning(true);
       }
 
+      // 🔥 FORCE LOGOUT
       if (remaining <= 0) {
         clearInterval(interval);
         onExpire();
@@ -48,5 +63,16 @@ export default function useSessionTimer(onExpire) {
     return () => clearInterval(interval);
   }, [onExpire]);
 
-  return { showWarning, timeLeft, setShowWarning };
+  /*
+  ========================================
+  🔄 MANUAL RESET (Stay Active)
+  ========================================
+  */
+  const resetSession = () => {
+    isLockedRef.current = false;       // 🔓 UNLOCK
+    lastActivityRef.current = Date.now();
+    setShowWarning(false);
+  };
+
+  return { showWarning, timeLeft, setShowWarning, resetSession };
 }

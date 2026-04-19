@@ -63,6 +63,22 @@ const buildSurveyLink = ({ month, client, agentName, recipientName, email }) => 
 📧 EMAIL TEMPLATE
 ==================================================
 */
+
+const formatMonthDisplay = (month) => {
+  // input: "2026 (04) Apr"
+  const match = month.match(/^(\d{4}) \((\d{2})\)/);
+  if (!match) return month;
+
+  const year = match[1];
+  const monthIndex = parseInt(match[2], 10) - 1;
+
+  const date = new Date(year, monthIndex);
+  return date.toLocaleString("en-US", {
+    month: "long",
+    year: "numeric",
+  }); // → "April 2026"
+};
+
 const getEmailHtml = ({
   month,
   client,
@@ -77,8 +93,8 @@ const getEmailHtml = ({
 
   const audienceText =
     emailType === "individual" && recipientName
-      ? "your recent interaction"
-      : "your team's recent interactions";
+      ? "the services and support provided to you"
+      : "the services and support provided to your team";
 
   const surveyLink = buildSurveyLink({
     month,
@@ -106,10 +122,9 @@ const getEmailHtml = ({
 
         <p>
           As part of our ongoing commitment to delivering excellent service to
-          <strong>${escapeHtml(client)}</strong>, we would truly appreciate your feedback on
-          <strong>${escapeHtml(audienceText)}</strong> handled by
-          <strong>${escapeHtml(agentName)}</strong> during
-          <strong>${escapeHtml(month)}</strong>.
+          <strong>${escapeHtml(client)}</strong>, we would truly appreciate your feedback on the services and support delivered by Callmax Solutions through
+          <strong>${escapeHtml(agentName)}</strong> during the month of
+          <strong>${escapeHtml(formatMonthDisplay(month))}</strong>.
         </p>
 
         <div style="text-align:center; margin:30px 0;">
@@ -259,7 +274,7 @@ router.post("/send-survey-email", requireAuth, async (req, res) => {
     await transporter.sendMail({
       from: "Callmax Solutions <noreply@callmaxsolutions.com>",
       to: email,
-      subject: `VOC Survey Request - ${month}`,
+      subject: `VOC Survey Request - ${formatMonthDisplay(month)}`,
       html,
     });
 
