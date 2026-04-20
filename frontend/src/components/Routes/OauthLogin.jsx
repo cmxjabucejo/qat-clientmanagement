@@ -178,7 +178,7 @@ const OauthLogin = () => {
           <button
             onClick={handleManualOtpLogin}
             disabled={isSending}
-            className={`w-full py-2 rounded text-white transition-all duration-200 ${
+            className={`w-full py-2 text-sm rounded text-white transition-all duration-200 ${
               isSending
                 ? "bg-gray-500 cursor-not-allowed"
                 : "bg-[#0084a4] hover:bg-[#015368]"

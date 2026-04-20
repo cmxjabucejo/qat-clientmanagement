@@ -18,9 +18,7 @@ import SessionExpiredModal from "./components/common/SessionExpiredModal";
 import SessionWarningModal from "./components/common/SessionWarningModal";
 import IdleWarningModal from "./components/common/IdleWarningModal";
 
-
-import useSessionTimer from "./components/lib/useSessionTimer";
-import useInactivityTimer from "./components/lib/useInactivityTimer";
+import useUnifiedSessionTimer from "./components/lib/useUnifiedSessionTimer";
 
 import { SERVER_URL } from "./components/lib/constants";
 
@@ -90,7 +88,6 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasSession, setHasSession] = useState(false);
-  const [isExpiring, setIsExpiring] = useState(false);
 
   /*
   ========================================
@@ -197,10 +194,7 @@ export default function App() {
   ⏳ TIMERS
   ========================================
   */
-  const { showWarning, timeLeft, resetSession } = useSessionTimer(handleExpire);
-
-  const { showIdleWarning, idleTimeLeft, setShowIdleWarning } =
-    useInactivityTimer(handleExpire, setIsExpiring);
+  const { showWarning, formattedTime, resetSession } = useUnifiedSessionTimer(handleExpire);
 
   /*
   ========================================
@@ -269,14 +263,10 @@ export default function App() {
 
       <SessionWarningModal
         show={showWarning && !sessionExpired}
-        timeLeft={timeLeft}
+        timeLeft={formattedTime}
         onStayActive={resetSession}
       />
 
-      <IdleWarningModal
-        show={showIdleWarning && !sessionExpired}
-        timeLeft={idleTimeLeft}
-      />
     </>
   );
 }
