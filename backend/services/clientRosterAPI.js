@@ -243,11 +243,7 @@ router.post(
       NOTES FORMAT
       ========================================
       */
-      const formattedNotes = formatNoteEntry(
-        data.userFirstName,
-        data.userLastName,
-        data.notes
-      );
+      const formattedNotes = safeLongText(data.notes);
 
       /*
       ========================================

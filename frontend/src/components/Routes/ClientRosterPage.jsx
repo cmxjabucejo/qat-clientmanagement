@@ -32,6 +32,7 @@ const ClientRosterPage = ({ user }) => {
   const [siteFilter, setSiteFilter] = useState("All");
   const [selectedClientId, setSelectedClientId] = useState(null);
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
+  // const [showDetailsPanel, setShowDetailsPanel] = useState(false);
 
   // 👉 NEW: sort mode (default A-Z)
   const [searchTerm, setSearchTerm] = useState("");
@@ -202,10 +203,34 @@ const ClientRosterPage = ({ user }) => {
       sortConfig,
     ]);
 
-  const selectedClient = useMemo(
-    () => filteredClients.find((c) => c.ID === selectedClientId) || null,
-    [filteredClients, selectedClientId],
-  );
+  const selectedClient = useMemo(() => {
+    return (
+      filteredClients.find((c) => c.ID === selectedClientId) ||
+      filteredClients[0] ||
+      null
+    );
+  }, [filteredClients, selectedClientId]);
+
+  useEffect(() => {
+    if (filteredClients.length === 0) {
+      setSelectedClientId(null);
+      return;
+    }
+
+    const stillExists = filteredClients.some(
+      (client) => client.ID === selectedClientId
+    );
+
+    if (!stillExists) {
+      setSelectedClientId(filteredClients[0].ID);
+    }
+  }, [filteredClients, selectedClientId]);
+
+  // useEffect(() => {
+  //   if (!selectedClient) {
+  //     setShowDetailsPanel(false);
+  //   }
+  // }, [selectedClient]);
 
   // Keep selected id in sync when filters change
   // useEffect(() => {
@@ -576,6 +601,17 @@ const ClientRosterPage = ({ user }) => {
                 >
                   ⬇ Export to Excel
                 </button>
+
+                {/* <button
+                  className="h-9 px-4 rounded-full text-xs font-medium bg-[#003b5c] text-white hover:bg-[#002c45] transition disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    if (!selectedClient) return; // 🔥 HARD BLOCK
+                    setShowDetailsPanel((prev) => !prev);
+                  }}
+                  disabled={!selectedClient}
+                >
+                  {!selectedClient ? "Select a client": showDetailsPanel ? "Hide Details" : "Show Details"}
+                </button> */}
               </div>
             </div>
           </div>
@@ -645,7 +681,10 @@ const ClientRosterPage = ({ user }) => {
                                 ? "border-[#00a1c9] bg-[#e1edf5]/60"
                                 : "border-transparent"
                             }`}
-                            onClick={() => setSelectedClientId(row.ID)}
+                            onClick={() => {
+                              setSelectedClientId(row.ID);
+                              // setShowDetailsPanel(true); // 👈 auto open
+                            }}
                             onDoubleClick={() => {
                               setSelectedClientId(row.ID);
                               setShowEditAsNewModal(true);
@@ -717,6 +756,7 @@ const ClientRosterPage = ({ user }) => {
             fetchRoster(); // 🔥 refresh here
           }}
           onSave={() => {}} // no-op
+          user={user}
         />
 
         <EditClientAsNewModal
@@ -727,6 +767,7 @@ const ClientRosterPage = ({ user }) => {
           }}
           onSave={() => {}} // no-op
           client={selectedClient}
+          user={user}
         />
       </main>
     </div>
