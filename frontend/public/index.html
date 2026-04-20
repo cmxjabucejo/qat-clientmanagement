@@ -2,42 +2,61 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    
+    <!-- Favicon -->
     <link rel="icon" href="%PUBLIC_URL%/cmxtransparent.png" />
+    
+    <!-- Responsive -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    
+    <!-- Theme -->
+    <meta name="theme-color" content="#003b5c" />
+    
+    <!-- Description -->
     <meta
       name="description"
-      content="Web site created using create-react-app"
+      content="CMX Client Management Suite — A secure internal platform for managing client data, operations, and services. For exclusive use of Callmax Solutions."
     />
+
+    <!-- Author / Ownership -->
+    <meta name="author" content="Callmax Solutions" />
+    
+    <!-- App Title (for SEO + browser tabs) -->
+    <title>CMX Client Management Suite | Callmax Solutions</title>
+
+    <!-- Apple -->
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
-    <!--
-      manifest.json provides metadata used when your web app is installed on a
-      user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
-    -->
+
+    <!-- Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>CMX Client Management Suite</title>
+    <!-- Optional: Basic Security Headers (frontend hints) -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+
+    <!-- Optional: Prevent indexing (since internal system) -->
+    <meta name="robots" content="noindex, nofollow" />
   </head>
+
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <div style="text-align:center; padding:20px; font-family:sans-serif;">
+        <h3>JavaScript Required</h3>
+        <p>
+          The CMX Client Management Suite requires JavaScript to run properly.
+          Please enable JavaScript in your browser to continue.
+        </p>
+      </div>
+    </noscript>
+
+    <!-- App Root -->
     <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
 
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
+    <!-- Footer Notice (can be styled in React instead if preferred) -->
+    <footer style="display:none;">
+      © 2026 Callmax Solutions. All rights reserved.  
+      This system is for the exclusive use of Callmax Solutions and authorized users only.
+    </footer>
   </body>
 </html>
