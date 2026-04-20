@@ -1,36 +1,54 @@
+
 import { useEffect, useRef, useState } from "react";
 
-const SESSION_DURATION = 8 * 60 * 60 * 1000; // 8 hours
-const WARNING_TIME = 2 * 60 * 1000; // last 2 mins
+const SESSION_DURATION = 15 * 60 * 1000; // 15 minutes
+const WARNING_TIME = 1 * 60 * 1000;      // last 1 minute
 
-export default function useSessionTimer(onExpire) {
+export default function useUnifiedSessionTimer(onExpire) {
   const [showWarning, setShowWarning] = useState(false);
   const [timeLeft, setTimeLeft] = useState(SESSION_DURATION);
 
   const lastActivityRef = useRef(Date.now());
-  const isLockedRef = useRef(false); // 🔥 LOCK
+  const isLockedRef = useRef(false);
+
+  const formatTime = (ms) => {
+    const totalSeconds = Math.ceil(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   /*
   ========================================
-  🖱️ TRACK USER ACTIVITY
+  🖱️ TRACK ACTIVITY
   ========================================
   */
   useEffect(() => {
     const updateActivity = () => {
-      // ❌ DO NOT update if already in warning state
       if (isLockedRef.current) return;
-
       lastActivityRef.current = Date.now();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !isLockedRef.current) {
+        lastActivityRef.current = Date.now();
+      }
     };
 
     window.addEventListener("mousemove", updateActivity);
     window.addEventListener("keydown", updateActivity);
     window.addEventListener("click", updateActivity);
+    window.addEventListener("scroll", updateActivity);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("mousemove", updateActivity);
       window.removeEventListener("keydown", updateActivity);
       window.removeEventListener("click", updateActivity);
+      window.removeEventListener("scroll", updateActivity);
+
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -43,17 +61,17 @@ export default function useSessionTimer(onExpire) {
     const interval = setInterval(() => {
       const now = Date.now();
       const elapsed = now - lastActivityRef.current;
-      const remaining = SESSION_DURATION - elapsed;
+      const remaining = Math.max(0, SESSION_DURATION - elapsed);
 
       setTimeLeft(remaining);
 
-      // 🔥 TRIGGER WARNING ONCE AND LOCK
+      // 🔥 Trigger warning ONCE
       if (remaining <= WARNING_TIME && remaining > 0 && !isLockedRef.current) {
-        isLockedRef.current = true;   // 🔥 LOCK
+        isLockedRef.current = true;
         setShowWarning(true);
       }
 
-      // 🔥 FORCE LOGOUT
+      // 🔥 Force logout
       if (remaining <= 0) {
         clearInterval(interval);
         onExpire();
@@ -65,14 +83,18 @@ export default function useSessionTimer(onExpire) {
 
   /*
   ========================================
-  🔄 MANUAL RESET (Stay Active)
+  🔄 RESET (Stay Active)
   ========================================
   */
   const resetSession = () => {
-    isLockedRef.current = false;       // 🔓 UNLOCK
+    isLockedRef.current = false;
     lastActivityRef.current = Date.now();
     setShowWarning(false);
   };
 
-  return { showWarning, timeLeft, setShowWarning, resetSession };
+  return {
+    showWarning,
+    formattedTime: formatTime(timeLeft),
+    resetSession,
+  };
 }

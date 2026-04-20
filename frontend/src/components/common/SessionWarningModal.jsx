@@ -1,10 +1,7 @@
 import React from "react";
 
-export default function SessionWarningModal({ show, timeLeft, onStay }) {
+export default function SessionWarningModal({ show, timeLeft, onStayActive }) {
   if (!show) return null;
-
-  const minutes = Math.floor(timeLeft / 60000);
-  const seconds = Math.floor((timeLeft % 60000) / 1000);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -15,15 +12,15 @@ export default function SessionWarningModal({ show, timeLeft, onStay }) {
         </h2>
 
         <p className="text-gray-600 text-sm mb-4">
-          Your session will expire in:
+          You’ll be signed out in:
         </p>
 
         <p className="text-xl font-bold text-red-500 mb-6">
-          {minutes}:{seconds.toString().padStart(2, "0")}
+          {timeLeft}
         </p>
 
         <button
-          onClick={onStay}
+          onClick={onStayActive}
           className="w-full bg-[#003b5c] text-white py-2 rounded hover:bg-[#005a8c]"
         >
           Stay Logged In
