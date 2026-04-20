@@ -4,4 +4,4 @@ frontend/node_modules
 backend/.env
 frontend/.env
 test.jsx
-frontend/src/components/lib/constants.js
+frontend/src/lib/constants.js
