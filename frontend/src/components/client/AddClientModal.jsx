@@ -46,7 +46,7 @@ const INITIAL_FORM_DATA = {
   attachments: [],
 };
 
-const AddClientModal = ({ isOpen, onClose, onSave }) => {
+const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [saving, setSaving] = useState(false);
   const [files, setFiles] = useState([]);
@@ -171,8 +171,8 @@ const AddClientModal = ({ isOpen, onClose, onSave }) => {
       });
 
       // user info
-      formPayload.append("userFirstName", localStorage.getItem("userFirstname"));
-      formPayload.append("userLastName", localStorage.getItem("userLastname"));
+      formPayload.append("userFirstName", user?.firstName || user?.userEmail || "Unknown");
+      formPayload.append("userLastName", user?.lastName || "");
 
       const res = await axios.post(
         `${SERVER_URL}/api/client-roster`,

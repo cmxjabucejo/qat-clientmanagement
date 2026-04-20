@@ -47,7 +47,7 @@ const buildNotesWithHistory = (
   return `${newBlock}\n`;
 };
 
-const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
+const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
   const [formData, setFormData] = useState({
     effectiveDate: "",
     accountCode: "",
@@ -267,8 +267,8 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
     const finalNotes = buildNotesWithHistory(
       formData.previousNotes,
       formData.notes,
-      localStorage.getItem("userFirstname"),
-      localStorage.getItem("userLastname"),
+      user?.firstName,
+      user?.lastName,
     );
 
     setError("");
@@ -281,6 +281,9 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client }) => {
       Object.keys(formData).forEach((key) => {
         if (key === "attachments") {
           fd.append("existingAttachments", JSON.stringify(formData.attachments));
+        } else if (key === "notes") {
+          // 🔥 send FULL history instead of just new note
+          fd.append("notes", finalNotes);
         } else if (key !== "newFiles") {
           fd.append(key, formData[key] ?? "");
         }

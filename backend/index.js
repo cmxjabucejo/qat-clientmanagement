@@ -13,7 +13,7 @@ const { RedisStore: RateLimitRedisStore } = require("rate-limit-redis");
 
 // 🔐 SECURITY
 const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
+const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
 dotenv.config();
 
@@ -49,13 +49,6 @@ AWS.config.update({
 const app = express();
 app.set("trust proxy", 1);
 const PORT = process.env.SERVER_PORT || 5005;
-
-/*
-========================================
-🔧 TRUST PROXY
-========================================
-*/
-app.set("trust proxy", 1);
 
 /*
 ========================================
@@ -148,37 +141,48 @@ async function startServer() {
     const otpLimiter = rateLimit({
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
+        prefix: "otp:",
       }),
       windowMs: 10 * 60 * 1000, // 10 minutes
       max: 5,
       standardHeaders: true,
       legacyHeaders: false,
       keyGenerator: (req) =>
-        `${req.body?.emailAddress || "noemail"}_${req.ip}`,
+        `${req.body?.emailAddress || "noemail"}_${ipKeyGenerator(req.ip)}`,
     });
 
     const generalLimiter = rateLimit({
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
+        prefix: "general:",
       }),
-      windowMs: 15 * 60 * 1000,
+      windowMs: 5 * 60 * 1000,
       max: 150,
       standardHeaders: true,
       legacyHeaders: false,
       keyGenerator: (req) =>
-        req.session?.user?.id || rateLimit.ipKeyGenerator(req),
+        req.session?.user?.id || ipKeyGenerator(req.ip),
     });
 
     const uploadLimiter = rateLimit({
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
+        prefix: "upload:",
       }),
-      windowMs: 15 * 60 * 1000,
-      max: 20, // lower for uploads
+      windowMs: 5 * 60 * 1000,
+      max: 100,
       standardHeaders: true,
       legacyHeaders: false,
-      keyGenerator: (req) =>
-        req.session?.user?.id || rateLimit.ipKeyGenerator(req),
+      message: {
+        success: false,
+        error: "Too many save or upload attempts. Please try again in a few minutes.",
+      },
+      keyGenerator: (req) => {
+        if (req.session?.user?.id) {
+          return `user:${req.session.user.id}`;
+        }
+        return `ip:${ipKeyGenerator(req.ip)}`;
+      },
     });
 
     /*

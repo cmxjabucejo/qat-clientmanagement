@@ -17,7 +17,7 @@ const ClientEscalationsPage = ({ user }) => {
   const [selectedResolution, setSelectedResolution] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState([]);
   const [selectedOIC, setSelectedOIC] = useState("");
-  const [selectedEscalation, setSelectedEscalation] = useState(null);
+  const [selectedEscalation, setSelectedEscalation] = useState(() => null);
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedQuarter, setSelectedQuarter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
@@ -69,6 +69,7 @@ const ClientEscalationsPage = ({ user }) => {
     const m = new Date(date).getMonth() + 1;
     return Math.ceil(m / 3); // Q1–Q4
   };
+
 
   const filteredEscalations = useMemo(() => {
     return escalations
@@ -123,6 +124,21 @@ const ClientEscalationsPage = ({ user }) => {
       selectedMonth,
       sortConfig
     ]);
+
+  useEffect(() => {
+  if (filteredEscalations.length === 0) {
+    setSelectedEscalation(null);
+    return;
+  }
+
+  const exists = filteredEscalations.some(
+      (e) => e.ID === selectedEscalation?.ID
+    );
+
+    if (!exists) {
+      setSelectedEscalation(filteredEscalations[0]);
+    }
+  }, [filteredEscalations, selectedEscalation]);
 
   // ---- STATS ----
   const totalCount = filteredEscalations.length;
