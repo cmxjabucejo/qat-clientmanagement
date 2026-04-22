@@ -208,6 +208,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
         missing.push("PH Headcount");
     }
 
+
     if (data.status === "Discontinued") {
       if (!data.termDate) missing.push("Termination Date");
     }
@@ -470,6 +471,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                 >
                   <option value="Prospect Client">Prospect Client</option>
                   <option value="Onboarding">Onboarding</option>
+                  <option value="Pre-Sale">Pre-Sale</option>
                   <option value="Active">Active</option>
                   <option value="Discontinued">Discontinued</option>
                 </select>

@@ -122,6 +122,7 @@ const ClientRosterPage = ({ user }) => {
     "All",
     "Active",
     "Onboarding",
+    "Pre-Sale",
     "On Hold",
     "Discontinued",
     "Prospect Client",
@@ -380,6 +381,7 @@ const ClientRosterPage = ({ user }) => {
   const analytics = {
     active: getDistinctAccountsByStatus(["active"]),
     onboarding: getDistinctAccountsByStatus(["onboarding"]),
+    preSale: getDistinctAccountsByStatus(["pre-sale"]),
     onHold: getDistinctAccountsByStatus(["on hold"]),
     discontinuedOrCancelled: getDistinctAccountsByStatus([
       "discontinued",
@@ -402,7 +404,17 @@ const ClientRosterPage = ({ user }) => {
               Client-LOB-Task
             </h2>
             <div className="space-y-1 text-xs">
-              {segmentOptions.map((item) => (
+              {segmentOptions
+                .filter((item) => {
+                  const count = getSegmentCount(item);
+
+                    // Always show "All"
+                    if (item === "All") return true;
+
+                    // Hide if 0 or null
+                    return count && count > 0;
+                  })
+                  .map((item) => (
                 <button
                   key={item}
                   onClick={() => setSegment(item)}
@@ -516,7 +528,7 @@ const ClientRosterPage = ({ user }) => {
           <div className="px-5 pt-4 pb-3 border-b border-gray-100">
             {/* Analytics cards */}
             <div className="px-5 pb-4">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                 <div className="bg-white rounded-lg p-4 shadow-md border border-gray-200">
                   <div className="text-[11px] font-semibold text-gray-500 mb-1">
                     Active Accounts
@@ -532,6 +544,15 @@ const ClientRosterPage = ({ user }) => {
                   </div>
                   <div className="text-lg font-semibold text-[#003b5c]">
                     {analytics.onboarding}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-4 shadow-md border border-gray-200">
+                  <div className="text-[11px] font-semibold text-gray-500 mb-1">
+                    Pre-Sale Accounts
+                  </div>
+                  <div className="text-lg font-semibold text-[#003b5c]">
+                    {analytics.preSale}
                   </div>
                 </div>
 
