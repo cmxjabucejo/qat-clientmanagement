@@ -632,6 +632,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                   <option value="">(Select)</option>
                   {[
                     "CANADA",
+                    "UNITED KINGDOM",
                     "AL",
                     "AK",
                     "AZ",

@@ -463,6 +463,7 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
                 <option value="">(Select)</option>
                 {[
                   "CANADA",
+                  "UNITED KINGDOM",
                   "AL",
                   "AK",
                   "AZ",
