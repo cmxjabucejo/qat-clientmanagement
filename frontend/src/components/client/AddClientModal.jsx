@@ -292,6 +292,8 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
                 <option value="Onboarding">Onboarding</option>
                 <option value="Pre-Sale">Pre-Sale</option>
                 <option value="Active">Active</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="Declined">Declined</option>
                 <option value="Discontinued">Discontinued</option>
               </select>
             </div>
