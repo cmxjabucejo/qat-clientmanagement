@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/dbconfig");
-const { requireAuth } = require("../middleware/authMiddleware");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 const multer = require("multer");
 const AWS = require("aws-sdk");
 
@@ -135,7 +135,7 @@ const isSafeS3Key = (key) => {
 GET CLIENT ROSTER
 ========================================
 */
-router.get("/client-roster", requireAuth, async (req, res) => {
+router.get("/client-roster", requireAuth, requireRole("Admin"), async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT t1.*
@@ -168,8 +168,9 @@ INSERT CLIENT + ATTACHMENTS
 */
 router.post(
   "/client-roster",
-  upload.array("attachments"),
   requireAuth,
+  requireRole("Admin", "Super Admin"),
+  upload.array("attachments"),
   async (req, res) => {
     try {
       console.log("🔥 ROUTE HIT: /client-roster");
@@ -371,7 +372,11 @@ router.post(
 UPDATE NOTES
 ========================================
 */
-router.put("/client-roster/:id/notes", requireAuth, async (req, res) => {
+router.put(
+  "/client-roster/:id/notes",
+  requireAuth,
+  requireRole("Admin", "Super Admin"),
+  async (req, res) => {
   try {
     const { id } = req.params;
     const { note, userFirstName, userLastName } = req.body || {};
@@ -446,7 +451,11 @@ router.get("/clients", requireAuth, async (req, res) => {
 CLIENT ATTACHMENT (SIGNED URL)
 ========================================
 */
-router.get("/client-attachment", requireAuth, async (req, res) => {
+router.get(
+  "/client-attachment",
+  requireAuth,
+  requireRole("Admin", "Super Admin"),
+  async (req, res) => {
   try {
     const { key } = req.query;
 

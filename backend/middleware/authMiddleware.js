@@ -20,7 +20,15 @@ function requireRole(...allowedRoles) {
       });
     }
 
-    if (!allowedRoles.includes(sessionUser.userLevel)) {
+    const userRole = String(sessionUser.userLevel || "")
+      .trim()
+      .toLowerCase();
+
+    const allowed = allowedRoles.map((role) =>
+      String(role).trim().toLowerCase()
+    );
+
+    if (!allowed.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: "Forbidden",

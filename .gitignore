@@ -5,3 +5,5 @@ backend/.env
 frontend/.env
 test.jsx
 docker-compose.yml
+frontend/.env
+frontend/src/components/lib/constants.js

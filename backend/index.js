@@ -52,10 +52,60 @@ const PORT = process.env.SERVER_PORT || 5005;
 
 /*
 ========================================
-🔐 SECURITY
+🔐 SECURITY HEADERS
 ========================================
 */
-app.use(helmet());
+app.use(
+  helmet({
+    frameguard: {
+      action: "deny",
+    },
+    noSniff: true,
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+        imgSrc: ["'self'", "data:", "https:"],
+        fontSrc: ["'self'", "data:", "https:"],
+        connectSrc: [
+          "'self'",
+          "https://cms.cmxph.com",
+          "https://qat-cms.cmxph.com",
+          "http://localhost:3000",
+          "http://localhost:5005",
+        ],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+/*
+========================================
+🔐 MANUAL SECURITY HEADERS
+========================================
+*/
+app.use((req, res, next) => {
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+  );
+  next();
+});
+
 
 /*
 ========================================
@@ -117,21 +167,22 @@ async function startServer() {
       prefix: "cmx:",
     });
 
-  app.use(
-    session({
-      name: process.env.SESSION_NAME,
-      store: redisStore,
-      secret: process.env.SESSION_SECRET,
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",   // OK now (same domain)
-        maxAge: 1000 * 60 * 60 * 8,
-      },
-    })
-  );
+    app.use(
+      session({
+        name: process.env.SESSION_NAME || "cmx_cms_session",
+        store: redisStore,
+        secret: process.env.SESSION_SECRET,
+        resave: false,
+        saveUninitialized: false,
+        rolling: true,
+        cookie: {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: 1000 * 60 * 60 * 8,
+        },
+      })
+    );
 
     /*
     ========================================

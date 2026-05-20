@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require("../config/dbconfig");
 const AWS = require("aws-sdk");
 const nodemailer = require("nodemailer");
-const { requireAuth } = require("../middleware/authMiddleware");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
 const s3 = new AWS.S3();
 const ESCALATION_BUCKET = "cmxclientescalationfiles";
@@ -147,7 +147,11 @@ const getEmailHtml = ({
 📊 GET SURVEY RESPONSES
 ==================================================
 */
-router.get("/voc-responses", requireAuth, async (req, res) => {
+router.get(
+  "/voc-responses",
+  requireAuth,
+  requireRole("Admin", "Super Admin"),
+  async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT
@@ -182,7 +186,11 @@ router.get("/voc-responses", requireAuth, async (req, res) => {
 📎 GET ATTACHMENT (SAFE)
 ==================================================
 */
-router.get("/voc-attachment", requireAuth, async (req, res) => {
+router.get(
+  "/voc-attachment",
+  requireAuth,
+  requireRole("Admin", "Super Admin"),
+  async (req, res) => {
   try {
     const { key } = req.query;
 
@@ -214,7 +222,11 @@ router.get("/voc-attachment", requireAuth, async (req, res) => {
 📧 SEND SURVEY EMAIL (HARDENED)
 ==================================================
 */
-router.post("/send-survey-email", requireAuth, async (req, res) => {
+router.post(
+  "/send-survey-email",
+  requireAuth,
+  requireRole("Admin", "Super Admin"),
+  async (req, res) => {
   try {
     const {
       month,
