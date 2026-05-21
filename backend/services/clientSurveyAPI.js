@@ -10,23 +10,32 @@ const ESCALATION_BUCKET = "cmxclientescalationfiles";
 
 /*
 ==================================================
+🔐 ROLE ACCESS
+==================================================
+*/
+const adminAccess = [requireAuth, requireRole("Admin", "Super Admin")];
+
+/*
+==================================================
 📧 EMAIL CONFIG
 ==================================================
 */
 const transporter = nodemailer.createTransport({
-  host: "email-smtp.us-east-1.amazonaws.com",
-  port: 587,
+  host: process.env.EMAIL_HOST,
+  port: Number(process.env.EMAIL_PORT),
   secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  tls: { rejectUnauthorized: false },
+  tls: {
+    rejectUnauthorized: process.env.NODE_ENV === "production",
+  },
 });
 
 /*
 ==================================================
-🔐 HELPERS (HARDENED)
+🔐 HELPERS
 ==================================================
 */
 const MONTH_REGEX = /^\d{4} \(\d{2}\) [A-Z][a-z]{2}$/;
@@ -44,8 +53,24 @@ const escapeHtml = (value) => {
     .replace(/'/g, "&#39;");
 };
 
+const isSafeSurveyAttachmentKey = (key) => {
+  if (!key || typeof key !== "string") return false;
+  if (key.includes("..")) return false;
+  if (key.includes("\\")) return false;
+
+  // Adjust this if your VOC files are stored under a different fixed folder.
+  // This prevents users from requesting arbitrary S3 keys.
+  const allowedPrefixes = [
+    "surveyAttachments/",
+    "vocAttachments/",
+    "uploads/",
+  ];
+
+  return allowedPrefixes.some((prefix) => key.startsWith(prefix));
+};
+
 const buildSurveyLink = ({ month, client, agentName, recipientName, email }) => {
-  const baseUrl = "https://voc.cmxph.com/company-survey";
+  const baseUrl = process.env.VOC_SURVEY_URL || "https://voc.cmxph.com/company-survey";
 
   const params = new URLSearchParams();
   params.append("month", month);
@@ -63,20 +88,19 @@ const buildSurveyLink = ({ month, client, agentName, recipientName, email }) => 
 📧 EMAIL TEMPLATE
 ==================================================
 */
-
 const formatMonthDisplay = (month) => {
-  // input: "2026 (04) Apr"
-  const match = month.match(/^(\d{4}) \((\d{2})\)/);
+  const match = String(month || "").match(/^(\d{4}) \((\d{2})\)/);
   if (!match) return month;
 
   const year = match[1];
   const monthIndex = parseInt(match[2], 10) - 1;
 
   const date = new Date(year, monthIndex);
+
   return date.toLocaleString("en-US", {
     month: "long",
     year: "numeric",
-  }); // → "April 2026"
+  });
 };
 
 const getEmailHtml = ({
@@ -122,13 +146,13 @@ const getEmailHtml = ({
 
         <p>
           As part of our ongoing commitment to delivering excellent service to
-          <strong>${escapeHtml(client)}</strong>, we would truly appreciate your feedback on the services and support delivered by Callmax Solutions through
-          <strong>${escapeHtml(agentName)}</strong> during the month of
+          <strong>${escapeHtml(client)}</strong>, we would truly appreciate your feedback on ${escapeHtml(audienceText)}
+          through <strong>${escapeHtml(agentName)}</strong> during the month of
           <strong>${escapeHtml(formatMonthDisplay(month))}</strong>.
         </p>
 
         <div style="text-align:center; margin:30px 0;">
-          <a href="${surveyLink}"
+          <a href="${escapeHtml(surveyLink)}"
              style="background:#0b4a66;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;">
             Take the Survey
           </a>
@@ -145,13 +169,10 @@ const getEmailHtml = ({
 /*
 ==================================================
 📊 GET SURVEY RESPONSES
+Admin / Super Admin only
 ==================================================
 */
-router.get(
-  "/voc-responses",
-  requireAuth,
-  requireRole("Admin", "Super Admin"),
-  async (req, res) => {
+router.get("/voc-responses", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT
@@ -172,29 +193,34 @@ router.get(
         survey_month AS month,
         agent
       FROM 1006_customer_survey_system.survey_responses
+      ORDER BY submitted_at DESC
     `);
 
-    res.json({ success: true, data: rows });
+    return res.json({
+      success: true,
+      data: rows,
+    });
   } catch (err) {
     console.error("VOC FETCH ERROR:", err);
-    res.status(500).json({ success: false, error: "Failed to fetch data" });
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch data",
+    });
   }
 });
 
 /*
 ==================================================
-📎 GET ATTACHMENT (SAFE)
+📎 GET VOC ATTACHMENT
+Admin / Super Admin only
 ==================================================
 */
-router.get(
-  "/voc-attachment",
-  requireAuth,
-  requireRole("Admin", "Super Admin"),
-  async (req, res) => {
+router.get("/voc-attachment", ...adminAccess, async (req, res) => {
   try {
     const { key } = req.query;
 
-    if (!key || key.includes("..")) {
+    if (!isSafeSurveyAttachmentKey(key)) {
       return res.status(400).json({
         success: false,
         message: "Invalid file key",
@@ -207,10 +233,14 @@ router.get(
       Expires: 60,
     });
 
-    res.json({ success: true, url });
+    return res.json({
+      success: true,
+      url,
+    });
   } catch (err) {
-    console.error("S3 ERROR:", err);
-    res.status(500).json({
+    console.error("VOC ATTACHMENT S3 ERROR:", err);
+
+    return res.status(500).json({
       success: false,
       error: "Failed to generate file URL",
     });
@@ -219,14 +249,11 @@ router.get(
 
 /*
 ==================================================
-📧 SEND SURVEY EMAIL (HARDENED)
+📧 SEND SURVEY EMAIL
+Admin / Super Admin only
 ==================================================
 */
-router.post(
-  "/send-survey-email",
-  requireAuth,
-  requireRole("Admin", "Super Admin"),
-  async (req, res) => {
+router.post("/send-survey-email", ...adminAccess, async (req, res) => {
   try {
     const {
       month,
@@ -238,7 +265,6 @@ router.post(
       notes,
     } = req.body || {};
 
-    // 🔐 VALIDATION
     if (!month || !client || !emailType || !email || !agentName) {
       return res.status(400).json({
         success: false,
@@ -284,7 +310,7 @@ router.post(
     });
 
     await transporter.sendMail({
-      from: "Callmax Solutions <noreply@callmaxsolutions.com>",
+      from: process.env.EMAIL_FROM || "Callmax Solutions <noreply@callmaxsolutions.com>",
       to: email,
       subject: `VOC Survey Request - ${formatMonthDisplay(month)}`,
       html,
@@ -305,14 +331,14 @@ router.post(
       ]
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: "Survey email sent",
     });
-
   } catch (err) {
-    console.error("EMAIL ERROR:", err);
-    res.status(500).json({
+    console.error("SEND SURVEY EMAIL ERROR:", err);
+
+    return res.status(500).json({
       success: false,
       message: "Failed to send email",
     });
@@ -322,9 +348,10 @@ router.post(
 /*
 ==================================================
 📋 CLIENT LIST
+Admin / Super Admin only
 ==================================================
 */
-router.get("/clients-active", requireAuth, async (req, res) => {
+router.get("/clients-active", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT DISTINCT ACCOUNT AS ClientList
@@ -333,10 +360,14 @@ router.get("/clients-active", requireAuth, async (req, res) => {
       ORDER BY ClientList ASC
     `);
 
-    res.json(rows);
+    return res.json(rows);
   } catch (err) {
     console.error("CLIENT FETCH ERROR:", err);
-    res.status(500).json({ error: "Failed to fetch clients" });
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch clients",
+    });
   }
 });
 

@@ -24,19 +24,37 @@ const ClientEscalationsPage = ({ user }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedEscalationForEdit, setSelectedEscalationForEdit] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [sessionUser, setSessionUser] = useState(null);
+
   const [sortConfig, setSortConfig] = useState({
     key: "ESCALATION_DATE",
     direction: "desc",
   });
 
+  const fetchSession = async () => {
+    try {
+      const res = await axios.get(`${SERVER_URL}/api/session`, {
+        withCredentials: true,
+      });
+
+      const currentUser = res.data?.user || null;
+      const role = String(currentUser?.userLevel || "").trim().toLowerCase();
+
+      setSessionUser(currentUser);
+      setIsAdmin(role === "admin" || role === "super admin");
+    } catch (err) {
+      console.error("Failed to fetch session", err);
+      setSessionUser(null);
+      setIsAdmin(false);
+    }
+  };
+
   // Define at top level inside the component
   const fetchEscalations = async () => {
     try {
-      const role = localStorage.getItem("user_access_level");
-      const userid = localStorage.getItem("userId");
-
       const res = await axios.get(`${SERVER_URL}/api/escalations`, {
-        withCredentials: true, // 🔥 THIS IS THE FIX
+        withCredentials: true,
       });
 
       if (res.data?.success) {
@@ -58,6 +76,7 @@ const ClientEscalationsPage = ({ user }) => {
   };
 
   useEffect(() => {
+    fetchSession();
     fetchEscalations();
   }, []);
 
@@ -459,19 +478,23 @@ const ClientEscalationsPage = ({ user }) => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
 
-                <button
-                  className="h-9 px-4 rounded-full text-xs font-medium bg-[#f58220] text-white hover:bg-[#e3751a] transition"
-                  onClick={() => setShowAddModal(true)}
-                >
-                  + Add Escalation
-                </button>
+                {isAdmin && (
+                  <button
+                    className="h-9 px-4 rounded-full text-xs font-medium bg-[#f58220] text-white hover:bg-[#e3751a] transition"
+                    onClick={() => setShowAddModal(true)}
+                  >
+                    + Add Escalation
+                  </button>
+                )}
 
-                <button
-                  className="h-9 px-4 rounded-full text-xs font-medium bg-[#00a1c9] text-white hover:bg-[#008bb1] transition"
-                  onClick={exportToExcel}
-                >
-                  ⬇ Export to Excel
-                </button>
+                {isAdmin && (
+                  <button
+                    className="h-9 px-4 rounded-full text-xs font-medium bg-[#00a1c9] text-white hover:bg-[#008bb1] transition"
+                    onClick={exportToExcel}
+                  >
+                    ⬇ Export to Excel
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -11,7 +11,6 @@ import OauthLogin from "./components/Routes/OauthLogin";
 import ClientRoster from "./components/Routes/ClientRosterPage";
 import ClientEscalations from "./components/Routes/ClientEscalationsPage";
 import VOCS from "./components/Routes/VOCS";
-import Register from "./components/Routes/Register";
 import OtpVerification from "./components/common/OtpVerification";
 
 import SessionExpiredModal from "./components/common/SessionExpiredModal";
@@ -236,7 +235,6 @@ export default function App() {
           }
         />
 
-        <Route path="/Register" element={<Register />} />
         <Route path="/OTP-SECURE" element={<OtpVerification />} />
 
         {/* PROTECTED */}

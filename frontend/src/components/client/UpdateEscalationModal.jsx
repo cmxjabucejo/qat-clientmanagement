@@ -31,26 +31,20 @@ const UpdateEscalationModal = ({
   useEffect(() => {
     const checkUserRole = async () => {
       try {
-        const email = localStorage.getItem("userEmail");
+        const res = await axios.get(`${SERVER_URL}/api/session`, {
+          withCredentials: true,
+        });
 
-        if (!email) return;
+        const role = res.data?.user?.userLevel || "";
+        const normalizedRole = role.toLowerCase().trim();
 
-        const res = await axios.post(
-          `${SERVER_URL}/api/check-email`,
-          { email },
+        setIsAdmin(
+          normalizedRole === "admin" ||
+          normalizedRole === "super admin"
         );
-
-        if (res.data?.success) {
-          const role = res.data.user.userLevel || "";
-
-          if (role.toLowerCase().includes("admin")) {
-            setIsAdmin(true);
-          } else {
-            setIsAdmin(false);
-          }
-        }
       } catch (err) {
         console.error("Failed to verify user role", err);
+        setIsAdmin(false);
       }
     };
 
@@ -71,8 +65,25 @@ const UpdateEscalationModal = ({
   useEffect(() => {
     if (!isOpen) return;
 
-    const storedUserName = localStorage.getItem("name");
-    setUserName(storedUserName);
+    const loadSessionUser = async () => {
+      try {
+        const res = await axios.get(`${SERVER_URL}/api/session`, {
+          withCredentials: true,
+        });
+
+        const user = res.data?.user;
+
+        const fullName =
+          user?.fullName ||
+          `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+
+        setUserName(fullName || "Unknown User");
+      } catch {
+        setUserName("Unknown User");
+      }
+    };
+
+    loadSessionUser();
 
     setFormData({
       escalationID: escalationData.ESCALATIONID,
@@ -138,7 +149,7 @@ const UpdateEscalationModal = ({
         updated.oicEmail = selected?.EMAIL || "";
       }
 
-      if (name === "resolutionStatus" && value !== "Pending") {
+      if (name === "resolutionStatus" && value !== "Pending" && isAdmin) {
         updated.status = "Closed";
       }
 
@@ -461,7 +472,7 @@ const UpdateEscalationModal = ({
                 value={formData.resolvedDate}
                 onChange={handleChange}
                 className="w-full border rounded px-2 py-1.5"
-                disabled={isClosed || formData.status !== "Closed"}
+                disabled={isClosed || !isAdmin || formData.status !== "Closed"}
                 required={formData.status === "Closed"}
               />
             </div>

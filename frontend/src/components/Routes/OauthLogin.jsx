@@ -2,14 +2,13 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { SERVER_URL } from "../lib/constants";
 import logo from "../../assets/callmax_cover_removebg.png";
-import UserService from "../../service/UserService";
 import pkg from "../../../package.json";
 import { apiFetch } from "../lib/apiFetch";
 
 const OauthLogin = () => {
   const navigate = useNavigate();
   const APP_VERSION = pkg.version;
-
+  const GENERIC_AUTH_MESSAGE = "Invalid credentials or authentication request";
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -40,12 +39,12 @@ const OauthLogin = () => {
     setError("");
 
     if (!email) {
-      setError("Please enter your email address.");
+      setError(GENERIC_AUTH_MESSAGE);
       return;
     }
 
     if (!isCallmaxEmail(email)) {
-      setError("Please use your Callmax email address.");
+      setError(GENERIC_AUTH_MESSAGE);
       return;
     }
 
@@ -53,33 +52,8 @@ const OauthLogin = () => {
 
     try {
       // ===============================
-      // 1️⃣ CHECK EMAIL
-      // ===============================
-      const checkRes = await apiFetch(`${SERVER_URL}/api/check-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-
-      const checkData = await checkRes.json();
-
-      if (!checkRes.ok || !checkData.success) {
-        setError(checkData.error || "Email is not authorized.");
-        return;
-      }
-
-      const user = checkData.user;
-
-      if (user.userStatus?.toLowerCase() !== "active") {
-        setError("This account is not active.");
-        return;
-      }
-
-      // optional (UI only)
-      UserService.setPendingUser(user);
-
-      // ===============================
-      // 2️⃣ SEND OTP (SECURE)
+      // SEND OTP ONLY
+      // Do not expose check-email result in frontend
       // ===============================
       const otpRes = await apiFetch(`${SERVER_URL}/api/sendOTP`, {
         method: "POST",
@@ -87,53 +61,40 @@ const OauthLogin = () => {
         body: JSON.stringify({ emailAddress: email }),
       });
 
-      if (!otpRes) return;
-
-        // 🔥 HANDLE RATE LIMIT FIRST
-        if (otpRes.status === 429) {
-          const result = await otpRes.json();
-          setError(result.message || "Too many requests. Please wait.");
-          return;
-        }
-
-        const result = await otpRes.json();
-
-        if (!otpRes.ok || !result.success) {
-          setError(result.message || "Failed to send OTP.");
-          return;
-        }
-
-      if (!otpRes.ok || !result.success) {
-        setError(result.message || "Failed to send OTP.");
+      if (!otpRes) {
+        setError(GENERIC_AUTH_MESSAGE);
         return;
       }
 
-      // ===============================
-      // ✅ STORE SECURE DATA
-      // ===============================
+      if (otpRes.status === 429) {
+        setError(GENERIC_AUTH_MESSAGE);
+        return;
+      }
+
+      const result = await otpRes.json();
+
+      if (!otpRes.ok || !result.success || !result.challengeId || !result.expiresAt) {
+        setError(GENERIC_AUTH_MESSAGE);
+        return;
+      }
+
       localStorage.setItem("pendingChallengeId", result.challengeId);
       localStorage.setItem("pendingEmail", email);
       localStorage.setItem("pendingExpiryAt", result.expiresAt);
       localStorage.setItem("otpCooldownStart", Date.now());
 
-      // ===============================
-      // 3️⃣ GO TO OTP PAGE
-      // ===============================
       navigate("/OTP-SECURE", {
         state: {
           emailAddress: email,
         },
       });
-
     } catch (err) {
       console.error("OTP login error:", err);
-      setError("An error occurred. Please try again.");
+      setError(GENERIC_AUTH_MESSAGE);
     } finally {
       setIsSending(false);
     }
-  };
-
-  
+  };  
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-[#061326]">

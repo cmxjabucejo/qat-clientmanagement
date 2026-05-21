@@ -18,6 +18,13 @@ const s3 = new AWS.S3({
 
 /*
 ========================================
+ROLE ACCESS
+========================================
+*/
+const adminAccess = [requireAuth, requireRole("Admin", "Super Admin")];
+
+/*
+========================================
 UPLOAD CONFIG (HARDENED)
 ========================================
 */
@@ -35,13 +42,14 @@ const ALLOWED_FILE_TYPES = [
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB per file
+    fileSize: 10 * 1024 * 1024,
     files: 10,
   },
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_FILE_TYPES.includes(file.mimetype)) {
       return cb(new Error("Invalid file type"));
     }
+
     cb(null, true);
   },
 });
@@ -65,6 +73,7 @@ const normalizeDate = (val) => {
 
 const normalizeNumber = (val) => {
   if (val === "" || val === null || val === undefined) return null;
+
   const num = Number(val);
   return Number.isNaN(num) ? null : num;
 };
@@ -102,7 +111,9 @@ const formatNoteEntry = (first, last, rawNote) => {
   const safeFirst = safeString(first, 100) || "Unknown";
   const safeLast = safeString(last, 100) || "User";
 
-  return `---- ${safeFirst} ${safeLast} || ${timestamp} ----\n\n${safeLongText(rawNote) || ""}`;
+  return `---- ${safeFirst} ${safeLast} || ${timestamp} ----\n\n${
+    safeLongText(rawNote) || ""
+  }`;
 };
 
 const parseAttachments = (value) => {
@@ -127,15 +138,18 @@ const isSafeS3Key = (key) => {
   if (!key || typeof key !== "string") return false;
   if (key.includes("..")) return false;
   if (key.includes("\\")) return false;
+  if (!key.startsWith("clientRecordsAttachmentFolder/")) return false;
+
   return true;
 };
 
 /*
 ========================================
 GET CLIENT ROSTER
+Admin / Super Admin only
 ========================================
 */
-router.get("/client-roster", requireAuth, requireRole("Admin"), async (req, res) => {
+router.get("/client-roster", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT t1.*
@@ -154,40 +168,39 @@ router.get("/client-roster", requireAuth, requireRole("Admin"), async (req, res)
       ATTACHMENTS: parseAttachments(row.ATTACHMENTS),
     }));
 
-    res.json({ success: true, data: formatted });
+    return res.json({
+      success: true,
+      data: formatted,
+    });
   } catch (err) {
     console.error("ROSTER FETCH ERROR:", err);
-    res.status(500).json({ success: false, error: "Failed to load client roster" });
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to load client roster",
+    });
   }
 });
 
 /*
 ========================================
 INSERT CLIENT + ATTACHMENTS
+Admin / Super Admin only
 ========================================
 */
 router.post(
   "/client-roster",
-  requireAuth,
-  requireRole("Admin", "Super Admin"),
-  upload.array("attachments"),
+  ...adminAccess,
+  upload.array("attachments", 10),
   async (req, res) => {
     try {
-      console.log("🔥 ROUTE HIT: /client-roster");
-
-      // 👇 ADD THIS LINE HERE
-      console.log("CONTENT-TYPE:", req.headers["content-type"]);
-
-      console.log("BODY:", req.body);
-      console.log("FILES:", req.files);
-
       const data = { ...req.body };
       const existingAttachments = parseAttachments(data.existingAttachments);
       const files = req.files || [];
 
       /*
       ========================================
-      VALIDATION (STRICT)
+      VALIDATION
       ========================================
       */
       const requiredFields = ["account", "lob", "task"];
@@ -229,7 +242,7 @@ router.post(
 
       /*
       ========================================
-      ATTACHMENTS (SAFE)
+      ATTACHMENTS
       ========================================
       */
       const finalAttachments = dedupeAttachments([
@@ -241,14 +254,7 @@ router.post(
 
       /*
       ========================================
-      NOTES FORMAT
-      ========================================
-      */
-      const formattedNotes = safeLongText(data.notes);
-
-      /*
-      ========================================
-      VALUES (SAFE + CLEAN)
+      VALUES
       ========================================
       */
       const values = [
@@ -301,7 +307,7 @@ router.post(
 
         safeString(data.salesperson, 255) || null,
 
-        formattedNotes,
+        safeLongText(data.notes),
         safeLongText(data.specialInstructions),
 
         attachmentsJson,
@@ -331,12 +337,7 @@ router.post(
         values
       );
 
-      /*
-      ========================================
-      SUCCESS RESPONSE
-      ========================================
-      */
-      res.json({
+      return res.json({
         success: true,
         id: result.insertId,
         attachments: uploadedFiles,
@@ -359,7 +360,7 @@ router.post(
         });
       }
 
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: "Insert failed",
       });
@@ -370,92 +371,119 @@ router.post(
 /*
 ========================================
 UPDATE NOTES
+Admin / Super Admin only
 ========================================
 */
-router.put(
-  "/client-roster/:id/notes",
-  requireAuth,
-  requireRole("Admin", "Super Admin"),
-  async (req, res) => {
+router.put("/client-roster/:id/notes", ...adminAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const { note, userFirstName, userLastName } = req.body || {};
 
     if (!id) {
-      return res.status(400).json({ success: false, error: "Missing record ID" });
+      return res.status(400).json({
+        success: false,
+        error: "Missing record ID",
+      });
     }
 
     const newBlock = formatNoteEntry(userFirstName, userLastName, note);
 
     const [rows] = await db.execute(
-      `SELECT NOTES FROM 1000_cmx_appdata_client_database.db_cmx_client_roster WHERE ID = ?`,
+      `SELECT NOTES
+       FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
+       WHERE ID = ?`,
       [id]
     );
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: "Client roster record not found",
+      });
+    }
 
     const existing = rows[0]?.NOTES || "";
     const updated = existing ? `${existing}\n\n${newBlock}` : newBlock;
 
     await db.execute(
-      `UPDATE 1000_cmx_appdata_client_database.db_cmx_client_roster SET NOTES = ? WHERE ID = ?`,
+      `UPDATE 1000_cmx_appdata_client_database.db_cmx_client_roster
+       SET NOTES = ?
+       WHERE ID = ?`,
       [updated, id]
     );
 
-    res.json({ success: true, notes: updated });
+    return res.json({
+      success: true,
+      notes: updated,
+    });
   } catch (err) {
     console.error("UPDATE NOTES ERROR:", err);
-    res.status(500).json({ success: false, error: "Update failed" });
+
+    return res.status(500).json({
+      success: false,
+      error: "Update failed",
+    });
   }
 });
 
 /*
 ========================================
 ACCOUNT DETAILS
+Admin / Super Admin only
 ========================================
 */
-router.get("/accountDetails", requireAuth, async (req, res) => {
+router.get("/accountDetails", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT * FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
+      SELECT *
+      FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
       WHERE STATUS = 'Active'
     `);
 
-    res.json(rows);
+    return res.json(rows);
   } catch (err) {
     console.error("ACCOUNT DETAILS ERROR:", err);
-    res.status(500).json({ success: false, error: "DB error" });
+
+    return res.status(500).json({
+      success: false,
+      error: "DB error",
+    });
   }
 });
 
 /*
 ========================================
 CLIENTS
+Admin / Super Admin only
 ========================================
 */
-router.get("/clients", requireAuth, async (req, res) => {
+router.get("/clients", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.execute(`
       SELECT DISTINCT ACCOUNT
       FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
       WHERE STATUS = 'Active'
+      ORDER BY ACCOUNT ASC
     `);
 
-    res.json(rows);
+    return res.json(rows);
   } catch (err) {
     console.error("CLIENTS FETCH ERROR:", err);
-    res.status(500).json({ success: false, error: "Error fetching clients" });
+
+    return res.status(500).json({
+      success: false,
+      error: "Error fetching clients",
+    });
   }
 });
 
 /*
 ========================================
-CLIENT ATTACHMENT (SIGNED URL)
+CLIENT ATTACHMENT SIGNED URL
+Admin / Super Admin only
 ========================================
 */
-router.get(
-  "/client-attachment",
-  requireAuth,
-  requireRole("Admin", "Super Admin"),
-  async (req, res) => {
+router.get("/client-attachment", ...adminAccess, async (req, res) => {
   try {
     const { key } = req.query;
 
@@ -472,10 +500,14 @@ router.get(
       Expires: 60,
     });
 
-    res.json({ success: true, url });
+    return res.json({
+      success: true,
+      url,
+    });
   } catch (err) {
     console.error("CLIENT ATTACHMENT ERROR:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       error: "Failed to generate attachment URL",
     });

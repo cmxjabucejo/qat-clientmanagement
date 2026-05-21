@@ -9,6 +9,8 @@ const OtpVerification = () => {
   const location = useLocation();
   const APP_VERSION = pkg.version;
 
+  const GENERIC_AUTH_MESSAGE = "Invalid credentials or authentication request";
+
   const [enteredOtp, setEnteredOtp] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -34,7 +36,7 @@ const OtpVerification = () => {
 
   /*
   ========================================
-  🔁 INIT (OTP SESSION + TIMER)
+  🔁 INIT OTP SESSION + TIMER
   ========================================
   */
   useEffect(() => {
@@ -45,7 +47,7 @@ const OtpVerification = () => {
     const expiry = localStorage.getItem("pendingExpiryAt");
 
     if (!email || !challengeId || !expiry) {
-      setError("Session expired. Please request a new OTP.");
+      setError(GENERIC_AUTH_MESSAGE);
       return;
     }
 
@@ -70,11 +72,10 @@ const OtpVerification = () => {
       }
     }, 1000);
 
-    // 🔥 INIT RESEND COOLDOWN
     const cooldownStart = localStorage.getItem("otpCooldownStart");
 
     if (cooldownStart) {
-      const elapsed = Math.floor((Date.now() - cooldownStart) / 1000);
+      const elapsed = Math.floor((Date.now() - Number(cooldownStart)) / 1000);
       const remaining = 60 - elapsed;
 
       if (remaining > 0) {
@@ -82,7 +83,6 @@ const OtpVerification = () => {
       }
     }
 
-    // 🔥 AUTO-FOCUS
     setTimeout(() => otpRef.current?.focus(), 100);
 
     return () => clearInterval(interval);
@@ -98,19 +98,19 @@ const OtpVerification = () => {
     setSuccess("");
 
     if (isExpired) {
-      setError("OTP has expired. Please request a new one.");
+      setError(GENERIC_AUTH_MESSAGE);
       return;
     }
 
     const challengeId = localStorage.getItem("pendingChallengeId");
 
     if (!challengeId) {
-      setError("Session expired. Please request a new OTP.");
+      setError(GENERIC_AUTH_MESSAGE);
       return;
     }
 
     if (!enteredOtp || enteredOtp.length !== 6) {
-      setError("Please enter a valid 6-digit OTP.");
+      setError(GENERIC_AUTH_MESSAGE);
       return;
     }
 
@@ -126,31 +126,31 @@ const OtpVerification = () => {
         }),
       });
 
-      if (!res) return;
+      if (!res) {
+        setError(GENERIC_AUTH_MESSAGE);
+        return;
+      }
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setError(data.message || "Invalid OTP");
+        setError(GENERIC_AUTH_MESSAGE);
         return;
       }
 
-      setSuccess("OTP verified successfully!");
+      setSuccess("Authentication request verified.");
 
-      // 🔥 CLEANUP
       localStorage.removeItem("pendingChallengeId");
       localStorage.removeItem("pendingEmail");
       localStorage.removeItem("pendingExpiryAt");
       localStorage.removeItem("otpCooldownStart");
 
-      // 🔥 HARD REDIRECT → triggers session check
       setTimeout(() => {
         window.location.href = "/ClientEscalations";
       }, 400);
-
     } catch (err) {
-      console.error(err);
-      setError("Could not verify OTP. Please try again.");
+      console.error("VERIFY OTP ERROR:", err);
+      setError(GENERIC_AUTH_MESSAGE);
     }
   };
 
@@ -160,7 +160,6 @@ const OtpVerification = () => {
   ========================================
   */
   const handleResendOtp = async () => {
-    // 🚫 HARD BLOCK (THIS WAS MISSING)
     if (isResending || resendCooldown > 0) return;
 
     setError("");
@@ -170,14 +169,12 @@ const OtpVerification = () => {
     const email = localStorage.getItem("pendingEmail");
 
     if (!email) {
-      setError("Session expired. Please restart login.");
+      setError(GENERIC_AUTH_MESSAGE);
       setIsResending(false);
       return;
     }
 
     try {
-      console.log("🔥 RESEND OTP CALLED"); // DEBUG
-
       const res = await apiFetch(`${SERVER_URL}/api/sendOTP`, {
         method: "POST",
         headers: {
@@ -186,24 +183,26 @@ const OtpVerification = () => {
         body: JSON.stringify({ emailAddress: email }),
       });
 
-      if (!res) return;
+      if (!res) {
+        setError(GENERIC_AUTH_MESSAGE);
+        return;
+      }
 
       if (res.status === 429) {
-        const data = await res.json();
-        setError(data.message || "Too many requests. Please wait.");
+        setError(GENERIC_AUTH_MESSAGE);
         setResendCooldown(60);
         return;
       }
 
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
-        setError(data.message || "Failed to resend OTP.");
+      if (!res.ok || !data.success || !data.challengeId || !data.expiresAt) {
+        setError(GENERIC_AUTH_MESSAGE);
         return;
       }
 
-      // ✅ SUCCESS FLOW
       setEnteredOtp("");
+
       localStorage.setItem("pendingChallengeId", data.challengeId);
       localStorage.setItem("pendingExpiryAt", data.expiresAt);
       localStorage.setItem("otpCooldownStart", Date.now());
@@ -213,13 +212,12 @@ const OtpVerification = () => {
       setIsExpired(false);
 
       setResendCooldown(60);
-      setSuccess("A new OTP has been sent.");
+      setSuccess("Authentication request refreshed.");
 
       setTimeout(() => otpRef.current?.focus(), 150);
-
     } catch (err) {
-      console.error(err);
-      setError("Could not resend OTP.");
+      console.error("RESEND OTP ERROR:", err);
+      setError(GENERIC_AUTH_MESSAGE);
     } finally {
       setIsResending(false);
     }
@@ -239,6 +237,7 @@ const OtpVerification = () => {
           clearInterval(interval);
           return 0;
         }
+
         return prev - 1;
       });
     }, 1000);
@@ -258,24 +257,16 @@ const OtpVerification = () => {
     }
 
     const interval = setInterval(() => {
-      setResendDots((prev) =>
-        prev.length >= 3 ? "" : prev + "."
-      );
+      setResendDots((prev) => (prev.length >= 3 ? "" : prev + "."));
     }, 400);
 
     return () => clearInterval(interval);
   }, [isResending]);
 
-  /*
-  ========================================
-  UI
-  ========================================
-  */
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-[#061326]">
       <div className="relative w-full max-w-md">
         <div className="bg-white/10 border border-white/30 backdrop-blur-lg text-white px-10 py-7 rounded-xl w-full">
-
           <h2 className="text-lg font-bold text-center mb-1">
             Client Management Suite
           </h2>
@@ -285,11 +276,8 @@ const OtpVerification = () => {
           </h3>
 
           <p className="text-sm text-left mb-4 leading-relaxed text-white/90">
-            An OTP has been sent to{" "}
-            <span className="font-semibold text-white">
-              {emailAddress}
-            </span>
-            . Please enter it below to sign in.
+            If the authentication request is valid, an OTP has been sent. Please
+            enter it below to sign in.
           </p>
 
           <input
@@ -297,9 +285,10 @@ const OtpVerification = () => {
             type="text"
             maxLength={6}
             value={enteredOtp}
-            onChange={(e) =>
-              setEnteredOtp(e.target.value.replace(/\D/g, ""))
-            }
+            onChange={(e) => setEnteredOtp(e.target.value.replace(/\D/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleVerifyOtp();
+            }}
             placeholder="- - - - - -"
             className="w-full text-center text-lg tracking-[0.6em] bg-white/10 border border-white/20 px-3 py-3 rounded text-white placeholder-white/50"
           />
@@ -316,9 +305,7 @@ const OtpVerification = () => {
                   disabled={isResending || resendCooldown > 0}
                   className="disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isResending
-                    ? `Resending${resendDots}`
-                    : "Request new OTP"}
+                  {isResending ? `Resending${resendDots}` : "Request new OTP"}
                 </button>
               )
             ) : (
@@ -328,13 +315,22 @@ const OtpVerification = () => {
             )}
           </div>
 
-          {error && <p className="text-red-400 text-center mt-2">{error}</p>}
-          {success && <p className="text-green-400 text-center mt-2">{success}</p>}
+          {error && (
+            <p className="text-red-400 text-center mt-2">
+              {error}
+            </p>
+          )}
+
+          {success && (
+            <p className="text-green-400 text-center mt-2">
+              {success}
+            </p>
+          )}
 
           <button
             onClick={handleVerifyOtp}
             disabled={isExpired}
-            className="w-full mt-4 py-2 bg-[#0084a4] rounded"
+            className="w-full mt-4 py-2 bg-[#0084a4] rounded disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Verify OTP
           </button>

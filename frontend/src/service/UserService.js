@@ -1,45 +1,128 @@
 // src/service/UserService.js
 import { SERVER_URL } from "../components/lib/constants";
+import { apiFetch } from "../components/lib/apiFetch";
 
 class UserService {
   static BASE_URL = SERVER_URL;
 
-  // ✅ Auth check WITH 12-hour expiry
-  static isAuthenticated() {
-    const userId = localStorage.getItem("userId");
-    const sessionVerified = localStorage.getItem("sessionVerified");
-    const loginTime = localStorage.getItem("loginTime");
+  /*
+  ========================================
+  SERVER SESSION CHECK
+  Source of truth: backend Redis session
+  ========================================
+  */
+  static async getSession() {
+    try {
+      const res = await apiFetch(`${this.BASE_URL}/api/session`, {
+        method: "GET",
+        credentials: "include",
+      });
 
-    if (!userId || sessionVerified !== "1" || !loginTime) {
-      return false;
+      if (!res || !res.ok) {
+        return {
+          authenticated: false,
+          user: null,
+        };
+      }
+
+      const data = await res.json();
+
+      return {
+        authenticated: Boolean(data?.success && data?.user),
+        user: data?.user || null,
+      };
+    } catch (err) {
+      console.error("Session check failed:", err);
+
+      return {
+        authenticated: false,
+        user: null,
+      };
     }
-
-    const now = new Date().getTime();
-    const twelveHours = 12 * 60 * 60 * 1000;
-
-    // ⛔ Expired session
-    if (now - Number(loginTime) > twelveHours) {
-      this.logout();
-      return false;
-    }
-
-    return true;
   }
 
-  // ✅ Save pending user (before OTP verification)
-  static setPendingUser(user) {
-    if (user) {
-      localStorage.setItem("pendingUser", JSON.stringify(user));
+  /*
+  ========================================
+  AUTH STATUS
+  IMPORTANT: This is now async.
+  ========================================
+  */
+  static async isAuthenticated() {
+    const session = await this.getSession();
+    return session.authenticated;
+  }
+
+  /*
+  ========================================
+  CURRENT USER
+  ========================================
+  */
+  static async getCurrentUser() {
+    const session = await this.getSession();
+    return session.user;
+  }
+
+  /*
+  ========================================
+  LOGOUT
+  Backend destroys Redis session.
+  Frontend only clears temporary/local legacy values.
+  ========================================
+  */
+  static async logout() {
+    try {
+      await apiFetch(`${this.BASE_URL}/api/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      this.clearLocalAuthData();
     }
+  }
+
+  /*
+  ========================================
+  LOCAL CLEANUP ONLY
+  Do not use localStorage as auth source.
+  ========================================
+  */
+  static clearLocalAuthData() {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("sessionVerified");
+    localStorage.removeItem("loginTime");
+
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userFirstname");
+    localStorage.removeItem("userLastname");
+
+    localStorage.removeItem("user_access_level");
+    localStorage.removeItem("user_status");
+
+    localStorage.removeItem("pendingUser");
+    localStorage.removeItem("pendingOtpHashed");
+    localStorage.removeItem("pendingEmail");
+    localStorage.removeItem("pendingChallengeId");
+    localStorage.removeItem("pendingExpiryAt");
+    localStorage.removeItem("otpCooldownStart");
+  }
+
+  /*
+  ========================================
+  DEPRECATED METHODS
+  Kept temporarily so old imports do not crash.
+  Remove later after all components are updated.
+  ========================================
+  */
+  static setPendingUser() {
+    console.warn(
+      "UserService.setPendingUser is deprecated. Authentication is now handled by Redis-backed backend sessions."
+    );
   }
 
   static getPendingUser() {
-    const raw = localStorage.getItem("pendingUser");
-    try {
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   static clearPendingUser() {
@@ -48,74 +131,11 @@ class UserService {
     localStorage.removeItem("pendingEmail");
   }
 
-  static loginUser({
-    userId,
-    email,
-    firstname = "",
-    lastname = "",
-    providerId,
-    userLevel = "",
-    userStatus = "",
-  }) {
-    const finalId =
-      userId || providerId || (email ? `manual_${email}` : undefined);
-
-    if (!finalId) {
-      console.warn("loginUser called without a valid userId/providerId/email");
-    }
-
-    localStorage.setItem("userId", finalId || "");
-    localStorage.setItem("userEmail", email || "");
-    localStorage.setItem("userFirstname", firstname || "");
-    localStorage.setItem("userLastname", lastname || "");
-
-    // ✅ Keep userLevel and userStatus
-    localStorage.setItem("user_access_level", userLevel || "");
-    localStorage.setItem("user_status", userStatus || "");
-
-    localStorage.setItem("sessionVerified", "1");
-
-    // ✅ ADD: Save login timestamp
-    const now = new Date().getTime();
-    localStorage.setItem("loginTime", now);
-
-    this.clearPendingUser();
-
-    return finalId;
-  }
-
-  static getCurrentUser() {
-    const userId = localStorage.getItem("userId");
-    const email = localStorage.getItem("userEmail");
-    const firstname = localStorage.getItem("userFirstname");
-    const lastname = localStorage.getItem("userLastname");
-    const user_access_level = localStorage.getItem("user_access_level") || "";
-    const user_status = localStorage.getItem("user_status") || "";
-
-    return {
-      userId,
-      email,
-      firstname,
-      lastname,
-      user_access_level,
-      user_status,
-    };
-  }
-
-  static logout() {
-    localStorage.removeItem("userId");
-    localStorage.removeItem("sessionVerified");
-    localStorage.removeItem("loginTime"); // ✅ IMPORTANT
-
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("userFirstname");
-    localStorage.removeItem("userLastname");
-
-    // ✅ Clear user access data
-    localStorage.removeItem("user_access_level");
-    localStorage.removeItem("user_status");
-
-    this.clearPendingUser();
+  static loginUser() {
+    console.warn(
+      "UserService.loginUser is deprecated. Login is now handled by backend Redis session."
+    );
+    return null;
   }
 }
 

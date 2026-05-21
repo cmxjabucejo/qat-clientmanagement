@@ -1,5 +1,3 @@
-
-
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -16,6 +14,90 @@ const helmet = require("helmet");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
 dotenv.config();
+
+/*
+========================================
+🔐 REQUIRED ENV GUARD
+========================================
+*/
+const requiredEnv = [
+  "NODE_ENV",
+  "SESSION_SECRET",
+  "SESSION_NAME",
+
+  "MYSQL_HOST",
+  "MYSQL_USER",
+  "MYSQL_PASSWORD",
+
+  "REDIS_HOST",
+  "REDIS_PORT",
+
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_REGION",
+  "S3_BUCKET",
+
+  "EMAIL_HOST",
+  "EMAIL_PORT",
+  "EMAIL_USER",
+  "EMAIL_PASS",
+
+  "PROD_FRONTEND_URL",
+  "QAT_FRONTEND_URL",
+];
+
+const missingEnv = requiredEnv.filter((key) => !process.env[key]);
+
+if (missingEnv.length > 0) {
+  console.error("❌ Missing required environment variables:");
+  missingEnv.forEach((key) => console.error(`- ${key}`));
+  process.exit(1);
+}
+
+if (process.env.NODE_ENV === "production") {
+  if (process.env.SESSION_SECRET.length < 32) {
+    console.error("❌ SESSION_SECRET must be at least 32 characters in production.");
+    process.exit(1);
+  }
+
+  if (
+    process.env.PROD_FRONTEND_URL.includes("localhost") ||
+    process.env.QAT_FRONTEND_URL.includes("localhost")
+  ) {
+    console.error("❌ Production/QAT frontend URLs must not use localhost.");
+    process.exit(1);
+  }
+}
+
+/*
+========================================
+🌐 ENV / ORIGIN CONFIG
+========================================
+*/
+const isProduction = process.env.NODE_ENV === "production";
+
+const DEV_FRONTEND_URL = process.env.DEV_FRONTEND_URL;
+const DEV_BACKEND_URL = process.env.DEV_BACKEND_URL;
+const PROD_FRONTEND_URL = process.env.PROD_FRONTEND_URL;
+const QAT_FRONTEND_URL = process.env.QAT_FRONTEND_URL;
+
+const allowedOrigins = [
+  PROD_FRONTEND_URL,
+  QAT_FRONTEND_URL,
+
+  // Local dev only when not production
+  !isProduction ? DEV_FRONTEND_URL : null,
+].filter(Boolean);
+
+const allowedConnectSrc = [
+  "'self'",
+  PROD_FRONTEND_URL,
+  QAT_FRONTEND_URL,
+
+  // Local dev only when not production
+  !isProduction ? DEV_FRONTEND_URL : null,
+  !isProduction ? DEV_BACKEND_URL : null,
+].filter(Boolean);
 
 /*
 ========================================
@@ -74,18 +156,15 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", "https:"],
         imgSrc: ["'self'", "data:", "https:"],
         fontSrc: ["'self'", "data:", "https:"],
-        connectSrc: [
-          "'self'",
-          "https://cms.cmxph.com",
-          "https://qat-cms.cmxph.com",
-          "http://localhost:3000",
-          "http://localhost:5005",
-        ],
+        connectSrc: allowedConnectSrc,
         frameAncestors: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
-        upgradeInsecureRequests: [],
+
+        // Only force upgrade in QAT/PROD.
+        // This avoids localhost http issues during development.
+        ...(isProduction ? { upgradeInsecureRequests: [] } : {}),
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -106,7 +185,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 /*
 ========================================
 🌐 CORS
@@ -114,20 +192,28 @@ app.use((req, res, next) => {
 */
 app.use(
   cors({
-    origin: [
-      "https://cms.cmxph.com",
-      "http://localhost:3000",
-    ],
+    origin: (origin, callback) => {
+      // Allow curl, Postman, health checks, server-to-server,
+      // and same-origin requests with no Origin header.
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
 
 /*
 ========================================
-🔥 BODY PARSER (CRITICAL FIX)
+🔥 BODY PARSER
 ========================================
 */
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -194,7 +280,7 @@ async function startServer() {
         sendCommand: (...args) => redisClient.sendCommand(args),
         prefix: "otp:",
       }),
-      windowMs: 10 * 60 * 1000, // 10 minutes
+      windowMs: 10 * 60 * 1000,
       max: 5,
       standardHeaders: true,
       legacyHeaders: false,
@@ -226,12 +312,14 @@ async function startServer() {
       legacyHeaders: false,
       message: {
         success: false,
-        error: "Too many save or upload attempts. Please try again in a few minutes.",
+        error:
+          "Too many save or upload attempts. Please try again in a few minutes.",
       },
       keyGenerator: (req) => {
         if (req.session?.user?.id) {
           return `user:${req.session.user.id}`;
         }
+
         return `ip:${ipKeyGenerator(req.ip)}`;
       },
     });
@@ -248,13 +336,12 @@ async function startServer() {
 
     app.use("/api/sendOTP", otpLimiter);
 
-    // 🚫 CRITICAL: skip limiter for multipart
     app.use("/api", (req, res, next) => {
       const contentType = req.headers["content-type"] || "";
 
-      // 📦 If multipart (form + upload)
+      // 📦 Multipart upload routes
       if (contentType.startsWith("multipart/form-data")) {
-        return uploadLimiter(req, res, next); // ✅ NOT bypass
+        return uploadLimiter(req, res, next);
       }
 
       // 🔐 Everything else
@@ -283,7 +370,6 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
-
   } catch (err) {
     console.error("❌ Failed to start server:", err);
     process.exit(1);
