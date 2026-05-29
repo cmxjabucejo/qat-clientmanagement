@@ -1,4 +1,4 @@
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const pool = require("../config/dbconfig");
 
 const register = async (req, res) => {
@@ -13,7 +13,7 @@ const register = async (req, res) => {
     // Check if email already exists
     const [existing] = await connection.query(
       "SELECT * FROM z_webapp_easyapply.registration WHERE email = ?",
-      [email]
+      [email],
     );
     if (existing.length > 0) {
       return res.status(409).json({ message: "Email already registered." });
@@ -25,7 +25,7 @@ const register = async (req, res) => {
       `INSERT INTO z_webapp_easyapply.registration 
       (id, provider, email, provider_id, firstname, lastname, middlename, created_datetime) 
       VALUES (UUID(), ?, ?, ?, ?, ?, ?, NOW())`,
-      ["manual", email, email, hashedPassword, firstname, lastname, ""]
+      ["manual", email, email, hashedPassword, firstname, lastname, ""],
     );
 
     return res.status(201).json({ message: "Registration successful." });

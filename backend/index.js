@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-const AWS = require("aws-sdk");
 const session = require("express-session");
 
 // 🔴 REDIS
@@ -56,7 +55,9 @@ if (missingEnv.length > 0) {
 
 if (process.env.NODE_ENV === "production") {
   if (process.env.SESSION_SECRET.length < 32) {
-    console.error("❌ SESSION_SECRET must be at least 32 characters in production.");
+    console.error(
+      "❌ SESSION_SECRET must be at least 32 characters in production.",
+    );
     process.exit(1);
   }
 
@@ -114,17 +115,6 @@ process.on("unhandledRejection", (err) => {
 
 /*
 ========================================
-🌐 AWS CONFIG
-========================================
-*/
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
-});
-
-/*
-========================================
 🚀 APP INIT
 ========================================
 */
@@ -168,7 +158,7 @@ app.use(
       },
     },
     crossOriginEmbedderPolicy: false,
-  })
+  }),
 );
 
 /*
@@ -180,7 +170,7 @@ app.use((req, res, next) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
   );
   next();
 });
@@ -206,7 +196,7 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-  })
+  }),
 );
 
 /*
@@ -267,7 +257,7 @@ async function startServer() {
           sameSite: "lax",
           maxAge: 1000 * 60 * 60 * 8,
         },
-      })
+      }),
     );
 
     /*
@@ -297,8 +287,7 @@ async function startServer() {
       max: 150,
       standardHeaders: true,
       legacyHeaders: false,
-      keyGenerator: (req) =>
-        req.session?.user?.id || ipKeyGenerator(req.ip),
+      keyGenerator: (req) => req.session?.user?.id || ipKeyGenerator(req.ip),
     });
 
     const uploadLimiter = rateLimit({

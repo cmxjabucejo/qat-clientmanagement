@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/dbconfig");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
 
@@ -34,7 +34,9 @@ const transporter = nodemailer.createTransport({
 // 🧠 HELPERS
 // ===============================
 function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function getClientIp(req) {
@@ -75,7 +77,7 @@ async function writeAuditLog({
         ipAddress ?? null,
         userAgent ?? null,
         details ?? null,
-      ]
+      ],
     );
   } catch (err) {
     console.error("Audit log error:", err);
@@ -152,7 +154,7 @@ router.post("/check-email", async (req, res) => {
       `SELECT user_email, user_status
        FROM 0000_cmx_appdata_appusers.db_cmx_appusers_clientmanagement
        WHERE user_email = ?`,
-      [email]
+      [email],
     );
 
     const isAllowed = rows.length > 0 && rows[0].user_status === "Active";
@@ -163,7 +165,9 @@ router.post("/check-email", async (req, res) => {
       status: isAllowed ? "SUCCESS" : "DENIED",
       ipAddress: ip,
       userAgent: ua,
-      details: isAllowed ? "Authentication request accepted" : GENERIC_AUTH_MESSAGE,
+      details: isAllowed
+        ? "Authentication request accepted"
+        : GENERIC_AUTH_MESSAGE,
     });
 
     return res.status(200).json({
@@ -193,7 +197,9 @@ router.post("/check-email", async (req, res) => {
 // 🔐 SEND OTP - ANTI USER ENUMERATION
 // ===============================
 router.post("/sendOTP", async (req, res) => {
-  const emailAddress = normalizeEmail(req.body?.emailAddress || req.body?.email);
+  const emailAddress = normalizeEmail(
+    req.body?.emailAddress || req.body?.email,
+  );
   const ip = getClientIp(req);
   const ua = getUserAgent(req);
 
@@ -220,7 +226,7 @@ router.post("/sendOTP", async (req, res) => {
       `SELECT user_email, user_first_name, user_status
        FROM 0000_cmx_appdata_appusers.db_cmx_appusers_clientmanagement
        WHERE user_email = ?`,
-      [emailAddress]
+      [emailAddress],
     );
 
     if (!userRows.length || userRows[0].user_status !== "Active") {
@@ -252,7 +258,7 @@ router.post("/sendOTP", async (req, res) => {
       `UPDATE 0002_cmx_authhandler_cms.auth_otp_challenges_cms
        SET status = 'expired'
        WHERE email = ? AND status = 'pending'`,
-      [emailAddress]
+      [emailAddress],
     );
 
     // Generate OTP
@@ -274,7 +280,7 @@ router.post("/sendOTP", async (req, res) => {
         ip ?? null,
         ua ?? null,
         expires,
-      ]
+      ],
     );
 
     // Send OTP email
@@ -391,7 +397,7 @@ router.post("/verifyOTP", async (req, res) => {
       `SELECT *
        FROM 0002_cmx_authhandler_cms.auth_otp_challenges_cms
        WHERE challenge_id = ?`,
-      [challengeId]
+      [challengeId],
     );
 
     if (!rows.length) {
@@ -415,7 +421,7 @@ router.post("/verifyOTP", async (req, res) => {
         `UPDATE 0002_cmx_authhandler_cms.auth_otp_challenges_cms
          SET status = 'expired'
          WHERE challenge_id = ?`,
-        [challengeId]
+        [challengeId],
       );
 
       await writeAuditLog({
@@ -459,7 +465,7 @@ router.post("/verifyOTP", async (req, res) => {
         `UPDATE 0002_cmx_authhandler_cms.auth_otp_challenges_cms
          SET attempt_count = ?, status = ?
          WHERE challenge_id = ?`,
-        [newCount, newStatus, challengeId]
+        [newCount, newStatus, challengeId],
       );
 
       await writeAuditLog({
@@ -487,14 +493,14 @@ router.post("/verifyOTP", async (req, res) => {
            verified_user_agent = ?,
            verified_at = NOW()
        WHERE challenge_id = ?`,
-      [ip ?? null, ua ?? null, challengeId]
+      [ip ?? null, ua ?? null, challengeId],
     );
 
     const [userRows] = await db.execute(
       `SELECT *
        FROM 0000_cmx_appdata_appusers.db_cmx_appusers_clientmanagement
        WHERE user_email = ?`,
-      [c.email]
+      [c.email],
     );
 
     if (!userRows.length || userRows[0].user_status !== "Active") {
@@ -520,7 +526,7 @@ router.post("/verifyOTP", async (req, res) => {
       `SELECT id, ip_address
        FROM 0002_cmx_authhandler_cms.auth_user_devices
        WHERE user_email = ? AND fingerprint = ?`,
-      [c.email, fingerprint]
+      [c.email, fingerprint],
     );
 
     if (!devices.length) {
@@ -528,7 +534,7 @@ router.post("/verifyOTP", async (req, res) => {
         `INSERT INTO 0002_cmx_authhandler_cms.auth_user_devices
          (user_email, fingerprint, ip_address, user_agent, is_trusted)
          VALUES (?, ?, ?, ?, ?)`,
-        [c.email, fingerprint, ip ?? null, ua ?? null, false]
+        [c.email, fingerprint, ip ?? null, ua ?? null, false],
       );
 
       await writeAuditLog({
@@ -553,7 +559,7 @@ router.post("/verifyOTP", async (req, res) => {
              ip_address = ?,
              user_agent = ?
          WHERE id = ?`,
-        [ip ?? null, ua ?? null, devices[0].id]
+        [ip ?? null, ua ?? null, devices[0].id],
       );
     }
 

@@ -1,13 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/dbconfig");
-const AWS = require("aws-sdk");
+const { s3, BUCKET_NAME } = require("../utils/s3");
+const { PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const nodemailer = require("nodemailer");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
-const s3 = new AWS.S3();
-const ESCALATION_BUCKET = "cmxclientescalationfiles";
-
+const ESCALATION_BUCKET = BUCKET_NAME;
 /*
 ==================================================
 🔐 ROLE ACCESS
@@ -60,17 +60,20 @@ const isSafeSurveyAttachmentKey = (key) => {
 
   // Adjust this if your VOC files are stored under a different fixed folder.
   // This prevents users from requesting arbitrary S3 keys.
-  const allowedPrefixes = [
-    "surveyAttachments/",
-    "vocAttachments/",
-    "uploads/",
-  ];
+  const allowedPrefixes = ["surveyAttachments/", "vocAttachments/", "uploads/"];
 
   return allowedPrefixes.some((prefix) => key.startsWith(prefix));
 };
 
-const buildSurveyLink = ({ month, client, agentName, recipientName, email }) => {
-  const baseUrl = process.env.VOC_SURVEY_URL || "https://voc.cmxph.com/company-survey";
+const buildSurveyLink = ({
+  month,
+  client,
+  agentName,
+  recipientName,
+  email,
+}) => {
+  const baseUrl =
+    process.env.VOC_SURVEY_URL || "https://voc.cmxph.com/company-survey";
 
   const params = new URLSearchParams();
   params.append("month", month);
@@ -227,10 +230,13 @@ router.get("/voc-attachment", ...adminAccess, async (req, res) => {
       });
     }
 
-    const url = s3.getSignedUrl("getObject", {
+    const command = new GetObjectCommand({
       Bucket: ESCALATION_BUCKET,
       Key: key,
-      Expires: 60,
+    });
+
+    const url = await getSignedUrl(s3, command, {
+      expiresIn: 60,
     });
 
     return res.json({
@@ -255,15 +261,8 @@ Admin / Super Admin only
 */
 router.post("/send-survey-email", ...adminAccess, async (req, res) => {
   try {
-    const {
-      month,
-      client,
-      emailType,
-      email,
-      recipientName,
-      agentName,
-      notes,
-    } = req.body || {};
+    const { month, client, emailType, email, recipientName, agentName, notes } =
+      req.body || {};
 
     if (!month || !client || !emailType || !email || !agentName) {
       return res.status(400).json({
@@ -310,7 +309,9 @@ router.post("/send-survey-email", ...adminAccess, async (req, res) => {
     });
 
     await transporter.sendMail({
-      from: process.env.EMAIL_FROM || "Callmax Solutions <noreply@callmaxsolutions.com>",
+      from:
+        process.env.EMAIL_FROM ||
+        "Callmax Solutions <noreply@callmaxsolutions.com>",
       to: email,
       subject: `VOC Survey Request - ${formatMonthDisplay(month)}`,
       html,
@@ -328,7 +329,7 @@ router.post("/send-survey-email", ...adminAccess, async (req, res) => {
         recipientName || null,
         agentName,
         notes || null,
-      ]
+      ],
     );
 
     return res.json({

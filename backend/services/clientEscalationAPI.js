@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../config/dbconfig");
-const AWS = require("aws-sdk");
 const multer = require("multer");
 const { requireAuth } = require("../middleware/authMiddleware");
+const { s3, BUCKET_NAME } = require("../utils/s3");
+const { PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
-const s3 = new AWS.S3();
-const ESCALATION_BUCKET = "cmxclientescalationfiles";
+const ESCALATION_BUCKET = BUCKET_NAME;
 
 /*
 ========================================
@@ -109,7 +110,7 @@ function parseAttachmentList(value) {
 router.get("/escalMaxId", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.query(
-      "SELECT MAX(ID) as escalmaxID FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations"
+      "SELECT MAX(ID) as escalmaxID FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations",
     );
 
     return res.json({ maxId: rows[0]?.escalmaxID || 0 });
@@ -131,7 +132,7 @@ router.get("/escalMaxId", requireAuth, async (req, res) => {
 router.get("/oicList", requireAuth, async (req, res) => {
   try {
     const [rows] = await db.query(
-      "SELECT * FROM 1000_cmx_appdata_client_database.db_cmx_oiclist"
+      "SELECT * FROM 1000_cmx_appdata_client_database.db_cmx_oiclist",
     );
 
     return res.json(rows);
@@ -182,7 +183,7 @@ router.get("/escalations", requireAuth, async (req, res) => {
         WHERE LOWER(TRIM(OIC_EMAIL)) = ?
         ORDER BY ESCALATION_DATE DESC, ID DESC
         `,
-        [userEmail]
+        [userEmail],
       );
 
       rows = result;
@@ -222,14 +223,14 @@ router.post(
           const safeName = safeUploadFileName(file.originalname);
           const key = `uploads/${Date.now()}-${safeName}`;
 
-          await s3
-            .upload({
+          await s3.send(
+            new PutObjectCommand({
               Bucket: ESCALATION_BUCKET,
               Key: key,
               Body: file.buffer,
               ContentType: file.mimetype,
-            })
-            .promise();
+            }),
+          );
 
           attachmentKeys.push(key);
         }
@@ -267,7 +268,7 @@ router.post(
           req.body.criticality,
           req.body.status || "Open",
           JSON.stringify(attachmentKeys),
-        ]
+        ],
       );
 
       return res.json({ success: true });
@@ -300,7 +301,7 @@ router.post(
         error: "Insert failed",
       });
     }
-  }
+  },
 );
 
 /*
@@ -339,14 +340,14 @@ router.post(
           const safeName = safeUploadFileName(file.originalname);
           const key = `uploads/${Date.now()}-${safeName}`;
 
-          await s3
-            .upload({
+          await s3.send(
+            new PutObjectCommand({
               Bucket: ESCALATION_BUCKET,
               Key: key,
               Body: file.buffer,
               ContentType: file.mimetype,
-            })
-            .promise();
+            }),
+          );
 
           newFiles.push(key);
         }
@@ -367,7 +368,7 @@ router.post(
          FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations
          WHERE ESCALATIONID = ?
          LIMIT 1`,
-        [req.body.escalationID]
+        [req.body.escalationID],
       );
 
       if (!existingRows.length) {
@@ -443,7 +444,7 @@ router.post(
             JSON.stringify(finalFiles),
             req.body.dateLastUpdated,
             req.body.escalationID,
-          ]
+          ],
         );
       } else {
         await db.query(
@@ -468,7 +469,7 @@ router.post(
             req.body.dateLastUpdated,
             req.body.escalationID,
             userEmail,
-          ]
+          ],
         );
       }
 
@@ -505,7 +506,7 @@ router.post(
         error: "Update failed",
       });
     }
-  }
+  },
 );
 
 /*
@@ -541,7 +542,7 @@ router.get("/get-file", requireAuth, async (req, res) => {
         WHERE JSON_CONTAINS(ATTACHMENT, JSON_QUOTE(?))
         LIMIT 1
         `,
-        [key]
+        [key],
       );
 
       rows = result;
@@ -561,7 +562,7 @@ router.get("/get-file", requireAuth, async (req, res) => {
           AND LOWER(TRIM(OIC_EMAIL)) = ?
         LIMIT 1
         `,
-        [key, userEmail]
+        [key, userEmail],
       );
 
       rows = result;
@@ -574,10 +575,13 @@ router.get("/get-file", requireAuth, async (req, res) => {
       });
     }
 
-    const url = s3.getSignedUrl("getObject", {
+    const command = new GetObjectCommand({
       Bucket: ESCALATION_BUCKET,
       Key: key,
-      Expires: 60 * 5,
+    });
+
+    const url = await getSignedUrl(s3, command, {
+      expiresIn: 60 * 5,
     });
 
     return res.redirect(url);

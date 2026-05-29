@@ -3,18 +3,9 @@ const router = express.Router();
 const db = require("../config/dbconfig");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 const multer = require("multer");
-const AWS = require("aws-sdk");
-
-/*
-========================================
-AWS / S3
-========================================
-*/
-const s3 = new AWS.S3({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_REGION,
-});
+const { s3, BUCKET_NAME } = require("../utils/s3");
+const { PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 /*
 ========================================
@@ -129,8 +120,7 @@ const parseAttachments = (value) => {
 
 const dedupeAttachments = (files) => {
   return files.filter(
-    (file, index, self) =>
-      index === self.findIndex((f) => f.url === file.url)
+    (file, index, self) => index === self.findIndex((f) => f.url === file.url),
   );
 };
 
@@ -225,14 +215,14 @@ router.post(
         const cleanedName = safeFilename(file.originalname);
         const key = `clientRecordsAttachmentFolder/${Date.now()}_${cleanedName}`;
 
-        await s3
-          .upload({
+        await s3.send(
+          new PutObjectCommand({
             Bucket: process.env.S3_BUCKET,
             Key: key,
             Body: file.buffer,
             ContentType: file.mimetype,
-          })
-          .promise();
+          }),
+        );
 
         uploadedFiles.push({
           name: cleanedName,
@@ -334,7 +324,7 @@ router.post(
           SALESPERSON, NOTES, SPECIAL_INSTRUCTIONS, ATTACHMENTS, TERMDATE
         )
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        values
+        values,
       );
 
       return res.json({
@@ -365,7 +355,7 @@ router.post(
         error: "Insert failed",
       });
     }
-  }
+  },
 );
 
 /*
@@ -392,7 +382,7 @@ router.put("/client-roster/:id/notes", ...adminAccess, async (req, res) => {
       `SELECT NOTES
        FROM 1000_cmx_appdata_client_database.db_cmx_client_roster
        WHERE ID = ?`,
-      [id]
+      [id],
     );
 
     if (!rows.length) {
@@ -409,7 +399,7 @@ router.put("/client-roster/:id/notes", ...adminAccess, async (req, res) => {
       `UPDATE 1000_cmx_appdata_client_database.db_cmx_client_roster
        SET NOTES = ?
        WHERE ID = ?`,
-      [updated, id]
+      [updated, id],
     );
 
     return res.json({
@@ -494,10 +484,13 @@ router.get("/client-attachment", ...adminAccess, async (req, res) => {
       });
     }
 
-    const url = s3.getSignedUrl("getObject", {
+    const command = new GetObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key: key,
-      Expires: 60,
+    });
+
+    const url = await getSignedUrl(s3, command, {
+      expiresIn: 60,
     });
 
     return res.json({
