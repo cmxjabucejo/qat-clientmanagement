@@ -2,12 +2,14 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import cmxLogo from "../../assets/callmax_cover_removebg.png";
 import { SERVER_URL } from "../lib/constants";
+import { useCsrfStore } from "../../store/csrfStore";
 
 const ClientSuiteHeader = ({ user }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef();
+  const { csrfToken } = useCsrfStore();
 
   // ===============================
   // 🧠 USER DATA (SAFE FALLBACK)
@@ -25,9 +27,7 @@ const ClientSuiteHeader = ({ user }) => {
     "User";
 
   const initials =
-    `${firstname.charAt(0)}${lastname.charAt(0)}`
-      .toUpperCase()
-      .trim() || "U";
+    `${firstname.charAt(0)}${lastname.charAt(0)}`.toUpperCase().trim() || "U";
 
   const isActive = (path) => location.pathname.startsWith(path);
 
@@ -39,6 +39,9 @@ const ClientSuiteHeader = ({ user }) => {
       await fetch(`${SERVER_URL}/api/logout`, {
         method: "POST",
         credentials: "include",
+        headers: {
+          "X-CSRF-Token": csrfToken,
+        },
       });
     } catch (err) {
       console.error("Logout failed:", err);
@@ -60,8 +63,7 @@ const ClientSuiteHeader = ({ user }) => {
     };
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   return (
@@ -89,9 +91,7 @@ const ClientSuiteHeader = ({ user }) => {
               {initials}
             </div>
 
-            <span className="hidden sm:inline text-white/90">
-              {userName}
-            </span>
+            <span className="hidden sm:inline text-white/90">{userName}</span>
 
             <svg
               className={`w-4 h-4 transition-transform duration-200 ${

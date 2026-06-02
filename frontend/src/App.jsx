@@ -1,11 +1,5 @@
-import React, { useEffect, useState, useCallback} from "react";
-import {
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
-  Outlet,
-} from "react-router-dom";
+import React, { useEffect, useState, useCallback } from "react";
+import { Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 
 import OauthLogin from "./components/Routes/OauthLogin";
 import ClientRoster from "./components/Routes/ClientRosterPage";
@@ -20,6 +14,7 @@ import IdleWarningModal from "./components/common/IdleWarningModal";
 import useUnifiedSessionTimer from "./components/lib/useUnifiedSessionTimer";
 
 import { SERVER_URL } from "./components/lib/constants";
+import { useCsrfStore } from "./store/csrfStore";
 
 /*
 ========================================
@@ -29,13 +24,9 @@ import { SERVER_URL } from "./components/lib/constants";
 function RequireAuth({ isAuthed }) {
   const location = useLocation();
 
-  if (isAuthed === false)  {
+  if (isAuthed === false) {
     return (
-      <Navigate
-        to="/OauthLogin"
-        replace
-        state={{ from: location.pathname }}
-      />
+      <Navigate to="/OauthLogin" replace state={{ from: location.pathname }} />
     );
   }
 
@@ -87,6 +78,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const { csrfToken } = useCsrfStore();
 
   /*
   ========================================
@@ -107,6 +99,9 @@ export default function App() {
       await fetch(`${SERVER_URL}/api/logout`, {
         method: "POST",
         credentials: "include",
+        headers: {
+          "X-CSRF-Token": csrfToken,
+        },
       });
     } catch (e) {}
 
@@ -156,7 +151,6 @@ export default function App() {
           setUser(null);
           setIsAuthed(false);
         }
-
       } catch (err) {
         console.error("Session check failed:", err);
 
@@ -193,7 +187,8 @@ export default function App() {
   ⏳ TIMERS
   ========================================
   */
-  const { showWarning, formattedTime, resetSession } = useUnifiedSessionTimer(handleExpire);
+  const { showWarning, formattedTime, resetSession } =
+    useUnifiedSessionTimer(handleExpire);
 
   /*
   ========================================
@@ -240,7 +235,10 @@ export default function App() {
         {/* PROTECTED */}
         <Route element={<RequireAuth isAuthed={isAuthed} />}>
           <Route element={<RequireAdminOrHigher user={user} />}>
-            <Route path="/ClientRoster" element={<ClientRoster user={user} />} />
+            <Route
+              path="/ClientRoster"
+              element={<ClientRoster user={user} />}
+            />
             <Route path="/VOCS" element={<VOCS user={user} />} />
           </Route>
 
@@ -264,7 +262,6 @@ export default function App() {
         timeLeft={formattedTime}
         onStayActive={resetSession}
       />
-
     </>
   );
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
 import { apiFetch } from "../lib/apiFetch";
 import axios from "axios";
+import { api } from "../lib/axiosInterceptor";
 
 axios.defaults.withCredentials = true;
 
@@ -208,7 +209,6 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
         missing.push("PH Headcount");
     }
 
-
     if (data.status === "Discontinued") {
       if (!data.termDate) missing.push("Termination Date");
     }
@@ -260,7 +260,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
     const { isValid, missing } = validateRequired(formData);
     if (!isValid) {
       setError(
-        `Please fill the required fields for "${formData.status}": ${missing.join(", ")}`
+        `Please fill the required fields for "${formData.status}": ${missing.join(", ")}`,
       );
       return;
     }
@@ -281,7 +281,10 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
       // 🔹 append normal fields
       Object.keys(formData).forEach((key) => {
         if (key === "attachments") {
-          fd.append("existingAttachments", JSON.stringify(formData.attachments));
+          fd.append(
+            "existingAttachments",
+            JSON.stringify(formData.attachments),
+          );
         } else if (key === "notes") {
           // 🔥 send FULL history instead of just new note
           fd.append("notes", finalNotes);
@@ -295,10 +298,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
         fd.append("attachments", file);
       });
 
-      const res = await axios.post(
-        `${SERVER_URL}/api/client-roster`,
-        fd
-      );
+      const res = await api.post(`${SERVER_URL}/api/client-roster`, fd);
 
       const data = res.data;
 
@@ -308,7 +308,6 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
 
       setSubmitStatus("success");
       setSubmitMessage("Update saved successfully.");
-
     } catch (err) {
       console.error("Error saving client:", err);
       setSubmitStatus("error");
@@ -347,9 +346,9 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
 
       const res = await apiFetch(
         `${SERVER_URL}/api/client-attachment?key=${encodeURIComponent(key)}`,
-          {
-            method: "GET",
-          }
+        {
+          method: "GET",
+        },
       );
 
       const data = await res.json();
@@ -1098,7 +1097,6 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                   </label>
 
                   <div className="mt-1 min-h-[120px] w-full border border-gray-200 rounded-lg bg-gray-50 px-3 py-2 h-32">
-
                     <input
                       type="file"
                       multiple
@@ -1141,7 +1139,9 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                                 onClick={() =>
                                   setFormData((prev) => ({
                                     ...prev,
-                                    attachments: prev.attachments.filter((_, i) => i !== idx),
+                                    attachments: prev.attachments.filter(
+                                      (_, i) => i !== idx,
+                                    ),
                                   }))
                                 }
                                 className="text-red-500 text-[10px]"
@@ -1153,13 +1153,17 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-[11px] text-gray-400">No attachments available</p>
+                      <p className="text-[11px] text-gray-400">
+                        No attachments available
+                      </p>
                     )}
 
                     {/* 🔥 STEP 3: NEW FILES PREVIEW (ADD THIS HERE) */}
                     {formData.newFiles?.length > 0 && (
                       <div className="mt-3 border-t pt-2">
-                        <p className="text-[10px] text-gray-500 mb-1">New Files:</p>
+                        <p className="text-[10px] text-gray-500 mb-1">
+                          New Files:
+                        </p>
 
                         {formData.newFiles.map((file, idx) => (
                           <div
@@ -1173,7 +1177,9 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                               onClick={() =>
                                 setFormData((prev) => ({
                                   ...prev,
-                                  newFiles: prev.newFiles.filter((_, i) => i !== idx),
+                                  newFiles: prev.newFiles.filter(
+                                    (_, i) => i !== idx,
+                                  ),
                                 }))
                               }
                               className="text-red-500 text-[10px]"
@@ -1185,18 +1191,9 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                       </div>
                     )}
                   </div>
-
-
-
-
                 </div>
               </div>
             </div>
-
-
-
-
-
 
             {/* Footer buttons */}
             <div className="mt-5 flex justify-end gap-2">

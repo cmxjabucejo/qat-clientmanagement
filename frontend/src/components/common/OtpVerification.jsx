@@ -3,6 +3,8 @@ import { useLocation } from "react-router-dom";
 import { SERVER_URL } from "../lib/constants";
 import pkg from "../../../package.json";
 import { apiFetch } from "../lib/apiFetch";
+import { getCSRFToken } from "../../service/CSRFService";
+import { useCsrfStore } from "../../store/csrfStore";
 
 const OtpVerification = () => {
   const otpRef = useRef(null);
@@ -138,6 +140,8 @@ const OtpVerification = () => {
         return;
       }
 
+      const csrfToken = await getCSRFToken();
+      useCsrfStore.getState().setCsrfToken(csrfToken);
       setSuccess("Authentication request verified.");
 
       localStorage.removeItem("pendingChallengeId");
@@ -315,16 +319,10 @@ const OtpVerification = () => {
             )}
           </div>
 
-          {error && (
-            <p className="text-red-400 text-center mt-2">
-              {error}
-            </p>
-          )}
+          {error && <p className="text-red-400 text-center mt-2">{error}</p>}
 
           {success && (
-            <p className="text-green-400 text-center mt-2">
-              {success}
-            </p>
+            <p className="text-green-400 text-center mt-2">{success}</p>
           )}
 
           <button

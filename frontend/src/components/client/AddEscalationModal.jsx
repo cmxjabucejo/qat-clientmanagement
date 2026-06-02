@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { SERVER_URL } from "../lib/constants";
+import { api } from "../lib/axiosInterceptor";
 
 axios.defaults.withCredentials = true;
 
@@ -69,9 +70,10 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
     const loadFormData = async () => {
       try {
         const [oicRes, accRes, idRes] = await Promise.all([
-          axios.get(`${SERVER_URL}/api/oicList`),
-          axios.get(`${SERVER_URL}/api/accountDetails`),
-          axios.get(`${SERVER_URL}/api/escalMaxId`),
+          api.get(`${SERVER_URL}/api/oicList`),
+          api.get(`${SERVER_URL}/api/accountDetails`),
+          api.get(`${SERVER_URL}/api/escalMaxId`),
+          api,
         ]);
 
         setOicOptions(oicRes.data || []);
@@ -107,7 +109,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
     const filteredLobs = accounts
       .filter(
         (a) =>
-          normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account)
+          normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account),
       )
       .map((a) => a.LOB)
       .filter((lob, i, self) => lob && self.indexOf(lob) === i);
@@ -130,7 +132,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
       .filter(
         (a) =>
           normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account) &&
-          a.LOB === formData.lob
+          a.LOB === formData.lob,
       )
       .map((a) => a.TASK)
       .filter((task, i, self) => task && self.indexOf(task) === i);
@@ -145,7 +147,6 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
     }));
   }, [formData.lob, accounts]);
 
-
   useEffect(() => {
     if (!formData.account || !formData.lob || !formData.task) return;
 
@@ -153,7 +154,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
       (a) =>
         normalizeAccount(a.ACCOUNT) === normalizeAccount(formData.account) &&
         a.LOB === formData.lob &&
-        a.TASK === formData.task
+        a.TASK === formData.task,
     );
 
     if (matched) {
@@ -170,8 +171,6 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
       }));
     }
   }, [formData.account, formData.lob, formData.task, accounts]);
-
-
 
   useEffect(() => {
     const { site, account, task, escalationDate } = formData;
@@ -201,7 +200,6 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
     maxId,
   ]);
 
-
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
 
@@ -216,10 +214,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
 
     const validFiles = selectedFiles.filter((file) => {
       const ext = file.name.toLowerCase().split(".").pop();
-      return (
-        allowed.includes(file.type) ||
-        ["docx", "xlsx"].includes(ext)
-      );
+      return allowed.includes(file.type) || ["docx", "xlsx"].includes(ext);
     });
 
     if (validFiles.length !== selectedFiles.length) {
@@ -266,18 +261,18 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
         submission.append("files", file);
       });
 
-      const res = await axios.post(
+      const res = await api.post(
         `${SERVER_URL}/api/add-escalation`,
-        submission
+        submission,
       );
 
-    if (res.data.success) {
-      setSubmitStatus("success");
-      setSubmitMessage("Escalation successfully saved.");
-    } else {
-      setSubmitStatus("error");
-      setSubmitMessage("Submission failed. Please try again.");
-    }
+      if (res.data.success) {
+        setSubmitStatus("success");
+        setSubmitMessage("Escalation successfully saved.");
+      } else {
+        setSubmitStatus("error");
+        setSubmitMessage("Submission failed. Please try again.");
+      }
     } catch (err) {
       console.error("Error submitting escalation:", err);
 
@@ -285,7 +280,7 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
 
       setSubmitStatus("error");
       setSubmitMessage(
-        err.response?.data?.error || "Submission failed. Please try again."
+        err.response?.data?.error || "Submission failed. Please try again.",
       );
     } finally {
       setSaving(false);
@@ -303,8 +298,10 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
 
         {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4 text-xs">
-
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-2 gap-4 text-xs"
+        >
           <div>
             <label className="block mb-1 font-medium">Escalation ID</label>
             <input
@@ -353,9 +350,9 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
               {[...new Set(accounts.map((a) => normalizeAccount(a.ACCOUNT)))]
                 .sort()
                 .map((acc) => (
-                <option key={acc} value={normalizeAccount(acc)}>
-                  {acc}
-                </option>
+                  <option key={acc} value={normalizeAccount(acc)}>
+                    {acc}
+                  </option>
                 ))}
             </select>
           </div>
@@ -516,8 +513,6 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
             )}
           </div>
 
-
-
           <div className="col-span-2 flex justify-end gap-2 mt-2">
             <button
               type="button"
@@ -552,13 +547,10 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
       {submitStatus !== "idle" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
-
             <div className="flex items-center gap-3 mb-3">
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                  submitStatus === "success"
-                    ? "bg-emerald-100"
-                    : "bg-red-100"
+                  submitStatus === "success" ? "bg-emerald-100" : "bg-red-100"
                 }`}
               >
                 {submitStatus === "success" ? (
@@ -601,7 +593,6 @@ const AddEscalationModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

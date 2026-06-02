@@ -8,9 +8,27 @@ const { createClient } = require("redis");
 const { RedisStore: SessionStore } = require("connect-redis");
 const { RedisStore: RateLimitRedisStore } = require("rate-limit-redis");
 
+const { doubleCsrf } = require("csrf-csrf");
+const cookieParser = require("cookie-parser");
+
 // 🔐 SECURITY
 const helmet = require("helmet");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
+
+const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
+  getSecret: () => process.env.SESSION_SECRET,
+  // required in csrf-csrf v4
+  getSessionIdentifier: (req) => req.sessionID,
+  cookieName: "__Host-csrf-token",
+  cookieOptions: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/",
+  },
+  size: 64,
+  ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+});
 
 dotenv.config();
 
@@ -206,6 +224,7 @@ app.use(
 */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 /*
 ========================================
@@ -259,6 +278,11 @@ async function startServer() {
         },
       }),
     );
+
+    app.get("/api/csrf-token", (req, res) => {
+      const csrfToken = generateCsrfToken(req, res);
+      res.json({ csrfToken });
+    });
 
     /*
     ========================================
@@ -338,6 +362,8 @@ async function startServer() {
     });
 
     app.use("/api", authAPI);
+
+    app.use(doubleCsrfProtection);
     app.use("/api", clientRosterAPI);
     app.use("/api", clientEscalationAPI);
     app.use("/api", clientSurveyAPI);

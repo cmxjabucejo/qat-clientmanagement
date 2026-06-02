@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
 import { apiFetch } from "../lib/apiFetch";
 import axios from "axios";
+import { api } from "../lib/axiosInterceptor";
 
 axios.defaults.withCredentials = true;
 
@@ -126,7 +127,6 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
       if (!data.billingCycle) missing.push("Billing Cycle");
     }
 
-
     return {
       isValid: missing.length === 0,
       missing,
@@ -172,12 +172,15 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
       });
 
       // user info
-      formPayload.append("userFirstName", user?.firstName || user?.userEmail || "Unknown");
+      formPayload.append(
+        "userFirstName",
+        user?.firstName || user?.userEmail || "Unknown",
+      );
       formPayload.append("userLastName", user?.lastName || "");
 
-      const res = await axios.post(
+      const res = await api.post(
         `${SERVER_URL}/api/client-roster`,
-        formPayload
+        formPayload,
       );
 
       const data = res.data;
@@ -230,7 +233,7 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
     });
 
     const uniqueFiles = validFiles.filter(
-      (file) => !files.some((f) => f.name === file.name)
+      (file) => !files.some((f) => f.name === file.name),
     );
 
     setFiles((prev) => [...prev, ...uniqueFiles]);
@@ -328,7 +331,8 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
 
             <div>
               <label className="block text-[11px] font-medium text-gray-600">
-                Live Date {formData.status === "Active" && (
+                Live Date{" "}
+                {formData.status === "Active" && (
                   <span className="text-red-500">*</span>
                 )}
               </label>
@@ -895,28 +899,28 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
               onChange={handleFileChange}
               className="mt-1 w-full text-xs"
             />
-              {files.length > 0 && (
-                <ul className="mt-2 text-[11px] text-gray-600 space-y-1">
-                  {files.map((file, idx) => (
-                    <li
-                      key={idx}
-                      className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded"
-                    >
-                      <span className="truncate">📎 {file.name}</span>
+            {files.length > 0 && (
+              <ul className="mt-2 text-[11px] text-gray-600 space-y-1">
+                {files.map((file, idx) => (
+                  <li
+                    key={idx}
+                    className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded"
+                  >
+                    <span className="truncate">📎 {file.name}</span>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFiles((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                        className="text-red-500 text-[10px] hover:underline ml-2"
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFiles((prev) => prev.filter((_, i) => i !== idx))
+                      }
+                      className="text-red-500 text-[10px] hover:underline ml-2"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Footer buttons */}

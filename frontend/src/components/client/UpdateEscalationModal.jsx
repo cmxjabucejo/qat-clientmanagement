@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { SERVER_URL } from "../lib/constants";
+import { api } from "../lib/axiosInterceptor";
 
 axios.defaults.withCredentials = true;
 
@@ -31,7 +32,7 @@ const UpdateEscalationModal = ({
   useEffect(() => {
     const checkUserRole = async () => {
       try {
-        const res = await axios.get(`${SERVER_URL}/api/session`, {
+        const res = await api.get(`${SERVER_URL}/api/session`, {
           withCredentials: true,
         });
 
@@ -39,8 +40,7 @@ const UpdateEscalationModal = ({
         const normalizedRole = role.toLowerCase().trim();
 
         setIsAdmin(
-          normalizedRole === "admin" ||
-          normalizedRole === "super admin"
+          normalizedRole === "admin" || normalizedRole === "super admin",
         );
       } catch (err) {
         console.error("Failed to verify user role", err);
@@ -67,7 +67,7 @@ const UpdateEscalationModal = ({
 
     const loadSessionUser = async () => {
       try {
-        const res = await axios.get(`${SERVER_URL}/api/session`, {
+        const res = await api.get(`${SERVER_URL}/api/session`, {
           withCredentials: true,
         });
 
@@ -122,8 +122,7 @@ const UpdateEscalationModal = ({
   useEffect(() => {
     const fetchOIC = async () => {
       try {
-        const res = await axios.get(`${SERVER_URL}/api/oicList`, {
-        });
+        const res = await api.get(`${SERVER_URL}/api/oicList`, {});
 
         setOicOptions(res.data || []);
       } catch (err) {
@@ -215,12 +214,12 @@ const UpdateEscalationModal = ({
     formToSend.append("userName", userName);
 
     try {
-      const res = await axios.post(
+      const res = await api.post(
         `${SERVER_URL}/api/updateEscalationInfo`,
         formToSend,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
 
       if (res.data?.success) {
@@ -544,7 +543,7 @@ const UpdateEscalationModal = ({
                   const combined = [...prev, ...newFiles];
                   return combined.filter(
                     (file, index, self) =>
-                      index === self.findIndex((f) => f.name === file.name)
+                      index === self.findIndex((f) => f.name === file.name),
                   );
                 });
 

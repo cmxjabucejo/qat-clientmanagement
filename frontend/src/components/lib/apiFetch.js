@@ -1,4 +1,5 @@
 // src/components/lib/apiFetch.js
+import { useCsrfStore } from "../../store/csrfStore";
 
 function clearAuthLocalStorage() {
   localStorage.removeItem("pendingChallengeId");
@@ -38,6 +39,7 @@ function getDeviceId() {
 
 export async function apiFetch(url, options = {}) {
   try {
+    const csrfToken = useCsrfStore.getState().csrfToken;
     const deviceId = getDeviceId();
 
     const res = await fetch(url, {
@@ -45,6 +47,9 @@ export async function apiFetch(url, options = {}) {
       headers: {
         "Content-Type": "application/json",
         "x-device-id": deviceId,
+        ...(csrfToken && {
+          "X-CSRF-Token": csrfToken,
+        }),
         ...(options.headers || {}),
       },
       ...options,

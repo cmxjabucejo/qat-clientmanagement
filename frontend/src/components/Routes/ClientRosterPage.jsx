@@ -5,7 +5,8 @@ import ClientSuiteHeader from "../common/ClientSuiteHeader";
 import ClientDetailsPanel from "../client/ClientDetailsPanel";
 import AddClientModal from "../client/AddClientModal";
 import EditClientAsNewModal from "../client/EditClientAsNewModal";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 import { apiFetch } from "../lib/apiFetch";
 
 const formatDate = (value) => {
@@ -38,7 +39,7 @@ const ClientRosterPage = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({
     key: "effectiveDate", // default
-    direction: "desc",    // newest first
+    direction: "desc", // newest first
   });
 
   const handleSort = (key) => {
@@ -57,10 +58,9 @@ const ClientRosterPage = ({ user }) => {
     try {
       setLoading(true);
 
-      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, 
-        {
-          method: "GET",
-        });
+      const res = await apiFetch(`${SERVER_URL}/api/client-roster`, {
+        method: "GET",
+      });
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Failed to fetch roster.");
@@ -193,16 +193,16 @@ const ClientRosterPage = ({ user }) => {
       return 0;
     });
     return sorted;
-    }, [
-      clients,
-      segment,
-      tagFilter,
-      accountMgrFilter,
-      statusFilter,
-      siteFilter,
-      searchTerm,
-      sortConfig,
-    ]);
+  }, [
+    clients,
+    segment,
+    tagFilter,
+    accountMgrFilter,
+    statusFilter,
+    siteFilter,
+    searchTerm,
+    sortConfig,
+  ]);
 
   const selectedClient = useMemo(() => {
     return (
@@ -219,7 +219,7 @@ const ClientRosterPage = ({ user }) => {
     }
 
     const stillExists = filteredClients.some(
-      (client) => client.ID === selectedClientId
+      (client) => client.ID === selectedClientId,
     );
 
     if (!stillExists) {
@@ -300,13 +300,12 @@ const ClientRosterPage = ({ user }) => {
     }
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
     if (filteredClients.length === 0) {
       alert("No data to export.");
       return;
     }
 
-    // Define headers and data structure
     const data = filteredClients.map((client) => ({
       "Account Code": client.ACCOUNTCODE || "",
       Account: client.ACCOUNT || "",
@@ -335,13 +334,90 @@ const ClientRosterPage = ({ user }) => {
       Notes: client.NOTES || "",
     }));
 
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Client Roster");
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Callmax Solutions";
+    workbook.created = new Date();
 
-    // Trigger download
-    XLSX.writeFile(workbook, "ClientRoster.xlsx");
+    const worksheet = workbook.addWorksheet("Client Roster");
+
+    const headers = Object.keys(data[0]);
+
+    worksheet.columns = headers.map((header) => ({
+      header,
+      key: header,
+      width: Math.max(header.length + 5, 20),
+    }));
+
+    data.forEach((row) => {
+      worksheet.addRow(row);
+    });
+
+    // Header styling
+    const headerRow = worksheet.getRow(1);
+
+    headerRow.font = {
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF4D68AA" },
+    };
+
+    headerRow.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+
+    // Freeze header row
+    worksheet.views = [
+      {
+        state: "frozen",
+        ySplit: 1,
+      },
+    ];
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      let maxLength = column.header.length;
+
+      column.eachCell({ includeEmpty: true }, (cell) => {
+        const value = cell.value ? cell.value.toString() : "";
+        maxLength = Math.max(maxLength, value.length);
+      });
+
+      column.width = Math.min(maxLength + 3, 50);
+    });
+
+    // Currency formatting
+    [
+      "Regular Rate",
+      "Premium Rate",
+      "Deposit Fee",
+      "Setup Fee",
+      "Extra Monitor Fee (Per Unit)",
+      "DID per User / Month",
+    ].forEach((header) => {
+      const col = worksheet.getColumn(header);
+
+      col.numFmt = "#,##0.00";
+    });
+
+    // Auto-filter
+    worksheet.autoFilter = {
+      from: "A1",
+      to: `${String.fromCharCode(64 + headers.length)}1`,
+    };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    saveAs(blob, "ClientRoster.xlsx");
   };
 
   // ✅ Only keep latest (highest ID) per ACCOUNTCODE
@@ -408,32 +484,32 @@ const ClientRosterPage = ({ user }) => {
                 .filter((item) => {
                   const count = getSegmentCount(item);
 
-                    // Always show "All"
-                    if (item === "All") return true;
+                  // Always show "All"
+                  if (item === "All") return true;
 
-                    // Hide if 0 or null
-                    return count && count > 0;
-                  })
-                  .map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setSegment(item)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left hover:bg-[#e1edf5] ${
-                    segment === item
-                      ? "bg-[#e1edf5] text-[#003b5c] font-medium"
-                      : "text-gray-700"
-                  }`}
-                >
-                  <span>{item}</span>
+                  // Hide if 0 or null
+                  return count && count > 0;
+                })
+                .map((item) => (
+                  <button
+                    key={item}
+                    onClick={() => setSegment(item)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left hover:bg-[#e1edf5] ${
+                      segment === item
+                        ? "bg-[#e1edf5] text-[#003b5c] font-medium"
+                        : "text-gray-700"
+                    }`}
+                  >
+                    <span>{item}</span>
 
-                  {/* Show count for all except hide if zero */}
-                  {(item === "All" || getSegmentCount(item) > 0) && (
-                    <span className="text-[10px] text-gray-500 bg-white px-2 py-0.5 rounded-full">
-                      {getSegmentCount(item)}
-                    </span>
-                  )}
-                </button>
-              ))}
+                    {/* Show count for all except hide if zero */}
+                    {(item === "All" || getSegmentCount(item) > 0) && (
+                      <span className="text-[10px] text-gray-500 bg-white px-2 py-0.5 rounded-full">
+                        {getSegmentCount(item)}
+                      </span>
+                    )}
+                  </button>
+                ))}
             </div>
           </section>
 
@@ -494,7 +570,8 @@ const ClientRosterPage = ({ user }) => {
                     })
                   }
                   className={`flex-1 px-2 py-1 rounded-full border ${
-                    sortConfig.key === "effectiveDate" && sortConfig.direction === "asc"
+                    sortConfig.key === "effectiveDate" &&
+                    sortConfig.direction === "asc"
                       ? "bg-[#003b5c] text-white border-[#003b5c]"
                       : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                   }`}
@@ -504,14 +581,15 @@ const ClientRosterPage = ({ user }) => {
 
                 <button
                   type="button"
-                    onClick={() =>
+                  onClick={() =>
                     setSortConfig({
                       key: "effectiveDate",
                       direction: "desc",
                     })
                   }
                   className={`flex-1 px-2 py-1 rounded-full border ${
-                    sortConfig.key === "effectiveDate" && sortConfig.direction === "desc"
+                    sortConfig.key === "effectiveDate" &&
+                    sortConfig.direction === "desc"
                       ? "bg-[#003b5c] text-white border-[#003b5c]"
                       : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                   }`}
@@ -662,18 +740,18 @@ const ClientRosterPage = ({ user }) => {
                           { label: "Seats" },
                           { label: "Salesperson" },
                         ].map((col) => (
-                        <th
-                          key={col.label}
-                          onClick={() => col.key && handleSort(col.key)}
-                          className="px-4 py-2 text-left font-semibold text-xs text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:text-[#003b5c]"
-                        >
-                          {col.label}
-                          {sortConfig.key === col.key && (
-                            <span className="ml-1">
-                              {sortConfig.direction === "asc" ? "▲" : "▼"}
-                            </span>
-                          )}
-                        </th>
+                          <th
+                            key={col.label}
+                            onClick={() => col.key && handleSort(col.key)}
+                            className="px-4 py-2 text-left font-semibold text-xs text-gray-800 uppercase tracking-wide bg-gray-50 cursor-pointer hover:text-[#003b5c]"
+                          >
+                            {col.label}
+                            {sortConfig.key === col.key && (
+                              <span className="ml-1">
+                                {sortConfig.direction === "asc" ? "▲" : "▼"}
+                              </span>
+                            )}
+                          </th>
                         ))}
                       </tr>
                     </thead>

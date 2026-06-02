@@ -7,3 +7,4 @@ test.jsx
 docker-compose.yml
 frontend/.env
 frontend/src/components/lib/constants.js
+backend/uploads

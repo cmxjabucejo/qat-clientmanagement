@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { SERVER_URL } from "../lib/constants";
-import axios from "axios";
 import ClientSuiteHeader from "../common/ClientSuiteHeader";
 import ClientEscalationDetailsPanel from "../client/ClientEscalationDetailsPanel";
 import AddEscalationModal from "../client/AddEscalationModal";
 import UpdateEscalationModal from "../client/UpdateEscalationModal";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+import { api } from "../lib/axiosInterceptor";
 
 const ClientEscalationsPage = ({ user }) => {
   const [escalations, setEscalations] = useState([]);
@@ -23,7 +24,8 @@ const ClientEscalationsPage = ({ user }) => {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [selectedEscalationForEdit, setSelectedEscalationForEdit] = useState(null);
+  const [selectedEscalationForEdit, setSelectedEscalationForEdit] =
+    useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [sessionUser, setSessionUser] = useState(null);
 
@@ -34,12 +36,14 @@ const ClientEscalationsPage = ({ user }) => {
 
   const fetchSession = async () => {
     try {
-      const res = await axios.get(`${SERVER_URL}/api/session`, {
+      const res = await api.get(`${SERVER_URL}/api/session`, {
         withCredentials: true,
       });
 
       const currentUser = res.data?.user || null;
-      const role = String(currentUser?.userLevel || "").trim().toLowerCase();
+      const role = String(currentUser?.userLevel || "")
+        .trim()
+        .toLowerCase();
 
       setSessionUser(currentUser);
       setIsAdmin(role === "admin" || role === "super admin");
@@ -53,7 +57,7 @@ const ClientEscalationsPage = ({ user }) => {
   // Define at top level inside the component
   const fetchEscalations = async () => {
     try {
-      const res = await axios.get(`${SERVER_URL}/api/escalations`, {
+      const res = await api.get(`${SERVER_URL}/api/escalations`, {
         withCredentials: true,
       });
 
@@ -89,22 +93,43 @@ const ClientEscalationsPage = ({ user }) => {
     return Math.ceil(m / 3); // Q1–Q4
   };
 
-
   const filteredEscalations = useMemo(() => {
     return escalations
       .filter((e) => {
         if (selectedType && e.ESCALATIONTYPE !== selectedType) return false;
         if (selectedOIC && e.OIC !== selectedOIC) return false;
 
-        if (selectedCriticality.length > 0 && !selectedCriticality.includes(e.CRITICALITY)) return false;
-        if (selectedResolution.length > 0 && !selectedResolution.includes(e.RESOLUTIONSTATUS)) return false;
-        if (selectedStatus.length > 0 && !selectedStatus.includes(e.STATUS)) return false;
+        if (
+          selectedCriticality.length > 0 &&
+          !selectedCriticality.includes(e.CRITICALITY)
+        )
+          return false;
+        if (
+          selectedResolution.length > 0 &&
+          !selectedResolution.includes(e.RESOLUTIONSTATUS)
+        )
+          return false;
+        if (selectedStatus.length > 0 && !selectedStatus.includes(e.STATUS))
+          return false;
 
-        if (selectedYear && getYear(e.ESCALATION_DATE) !== Number(selectedYear)) return false;
-        if (selectedQuarter && getQuarter(e.ESCALATION_DATE) !== Number(selectedQuarter)) return false;
-        if (selectedMonth && getMonth(e.ESCALATION_DATE) !== Number(selectedMonth)) return false;
+        if (selectedYear && getYear(e.ESCALATION_DATE) !== Number(selectedYear))
+          return false;
+        if (
+          selectedQuarter &&
+          getQuarter(e.ESCALATION_DATE) !== Number(selectedQuarter)
+        )
+          return false;
+        if (
+          selectedMonth &&
+          getMonth(e.ESCALATION_DATE) !== Number(selectedMonth)
+        )
+          return false;
 
-        if (searchTerm && !e.ACCOUNT?.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        if (
+          searchTerm &&
+          !e.ACCOUNT?.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+          return false;
 
         return true;
       })
@@ -129,29 +154,29 @@ const ClientEscalationsPage = ({ user }) => {
         if (valA < valB) return direction === "asc" ? -1 : 1;
         if (valA > valB) return direction === "asc" ? 1 : -1;
         return 0;
-      })
-      }, [
-      escalations,
-      selectedType,
-      selectedCriticality,
-      selectedResolution,
-      selectedStatus,
-      selectedOIC,
-      searchTerm,
-      selectedYear,
-      selectedQuarter,
-      selectedMonth,
-      sortConfig
-    ]);
+      });
+  }, [
+    escalations,
+    selectedType,
+    selectedCriticality,
+    selectedResolution,
+    selectedStatus,
+    selectedOIC,
+    searchTerm,
+    selectedYear,
+    selectedQuarter,
+    selectedMonth,
+    sortConfig,
+  ]);
 
   useEffect(() => {
-  if (filteredEscalations.length === 0) {
-    setSelectedEscalation(null);
-    return;
-  }
+    if (filteredEscalations.length === 0) {
+      setSelectedEscalation(null);
+      return;
+    }
 
-  const exists = filteredEscalations.some(
-      (e) => e.ID === selectedEscalation?.ID
+    const exists = filteredEscalations.some(
+      (e) => e.ID === selectedEscalation?.ID,
     );
 
     if (!exists) {
@@ -206,10 +231,9 @@ const ClientEscalationsPage = ({ user }) => {
     return d.toLocaleDateString("en-US");
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     if (filteredEscalations.length === 0) return;
 
-    // Map only relevant fields for export
     const exportData = filteredEscalations.map((item) => ({
       "Escalation ID": item.ESCALATIONID,
       "Escalation Date": formatDate(item.ESCALATION_DATE),
@@ -229,17 +253,57 @@ const ClientEscalationsPage = ({ user }) => {
       "Date Resolved": formatDate(item.RESOLVEDDATE),
     }));
 
-    // Create worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Escalations");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Escalations");
 
-    // Trigger download
-    XLSX.writeFile(workbook, "escalations.xlsx");
+    const headers = Object.keys(exportData[0]);
+
+    worksheet.columns = headers.map((header) => ({
+      header,
+      key: header,
+      width: Math.max(header.length + 5, 20),
+    }));
+
+    exportData.forEach((row) => {
+      worksheet.addRow(row);
+    });
+
+    // Header styling
+    const headerRow = worksheet.getRow(1);
+
+    headerRow.font = {
+      bold: true,
+    };
+
+    headerRow.alignment = {
+      vertical: "middle",
+      horizontal: "center",
+    };
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      let maxLength = 15;
+
+      column.eachCell?.({ includeEmpty: true }, (cell) => {
+        const value = cell.value ? cell.value.toString() : "";
+        maxLength = Math.max(maxLength, value.length + 2);
+      });
+
+      column.width = Math.min(maxLength, 50);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    saveAs(blob, "escalations.xlsx");
   };
 
-
-  const years = [...new Set(escalations.map(e => getYear(e.ESCALATION_DATE)))].sort((a,b) => b-a);
+  const years = [
+    ...new Set(escalations.map((e) => getYear(e.ESCALATION_DATE))),
+  ].sort((a, b) => b - a);
 
   const months = [
     { value: 1, label: "Jan" },
@@ -253,7 +317,7 @@ const ClientEscalationsPage = ({ user }) => {
     { value: 9, label: "Sep" },
     { value: 10, label: "Oct" },
     { value: 11, label: "Nov" },
-    { value: 12, label: "Dec" }
+    { value: 12, label: "Dec" },
   ];
 
   const handleSort = (key) => {
@@ -387,7 +451,9 @@ const ClientEscalationsPage = ({ user }) => {
             >
               <option value="">All</option>
               {years.map((y) => (
-                <option key={y} value={y}>{y}</option>
+                <option key={y} value={y}>
+                  {y}
+                </option>
               ))}
             </select>
           </div>
@@ -422,7 +488,9 @@ const ClientEscalationsPage = ({ user }) => {
             >
               <option value="">All</option>
               {months.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
               ))}
             </select>
           </div>
@@ -513,7 +581,10 @@ const ClientEscalationsPage = ({ user }) => {
                       <thead className="border-b border-gray-100 sticky top-0 z-10">
                         <tr>
                           {[
-                            { label: "Escalation Date", key: "ESCALATION_DATE" },
+                            {
+                              label: "Escalation Date",
+                              key: "ESCALATION_DATE",
+                            },
                             { label: "Account", key: "ACCOUNT" },
                             { label: "Type", key: "ESCALATIONTYPE" },
                             { label: "Criticality", key: "CRITICALITY" },
@@ -584,8 +655,8 @@ const ClientEscalationsPage = ({ user }) => {
                                     row.CRITICALITY === "High"
                                       ? "bg-red-100 text-red-700"
                                       : row.CRITICALITY === "Medium"
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : "bg-blue-100 text-blue-700"
+                                        ? "bg-yellow-100 text-yellow-800"
+                                        : "bg-blue-100 text-blue-700"
                                   }`}
                                 >
                                   {row.CRITICALITY || "—"}
@@ -599,8 +670,8 @@ const ClientEscalationsPage = ({ user }) => {
                                     row.STATUS === "Closed"
                                       ? "bg-blue-100 text-blue-800"
                                       : row.STATUS === "Pending"
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : "bg-red-100 text-red-700"
+                                        ? "bg-yellow-100 text-yellow-800"
+                                        : "bg-red-100 text-red-700"
                                   }`}
                                 >
                                   {row.STATUS || "—"}
@@ -643,7 +714,6 @@ const ClientEscalationsPage = ({ user }) => {
             fetchEscalations(); // refresh table
           }}
         />
-
       </main>
     </div>
   );
