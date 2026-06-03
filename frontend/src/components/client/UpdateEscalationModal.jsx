@@ -590,7 +590,7 @@ const UpdateEscalationModal = ({
                       ✔
                     </span>
                   ) : (
-                    <span className="text-lg text-red-700 animate-[shake_0.3s_ease-in-out_2]">
+                    <span className="text-lg text-red-700 animate-shake">
                       !
                     </span>
                   )}

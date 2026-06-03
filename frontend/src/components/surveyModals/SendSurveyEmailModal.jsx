@@ -202,13 +202,12 @@ export default function SendSurveyEmailModal({
                   className="w-full rounded border px-2 py-1.5"
                 >
                   <option value="">Select</option>
-                  
-                  {getLast3Months().map((m) => (
-                  <option key={m.value} value={m.value}>
-                      {m.label}
-                  </option>
-                  ))}
 
+                  {getLast3Months().map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -223,7 +222,7 @@ export default function SendSurveyEmailModal({
                   className="w-full rounded border px-2 py-1.5"
                 >
                   <option value="">Select</option>
-                 {normalizedClients.map((c, i) => (
+                  {normalizedClients.map((c, i) => (
                     <option key={`${c.value}-${i}`} value={c.value}>
                       {c.label}
                     </option>
@@ -340,9 +339,7 @@ export default function SendSurveyEmailModal({
                     ✔
                   </span>
                 ) : (
-                  <span className="text-lg text-red-700 animate-[shake_0.3s_ease-in-out_2]">
-                    !
-                  </span>
+                  <span className="text-lg text-red-700 animate-shake">!</span>
                 )}
               </div>
 
