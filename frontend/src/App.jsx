@@ -15,6 +15,7 @@ import useUnifiedSessionTimer from "./components/lib/useUnifiedSessionTimer";
 
 import { SERVER_URL } from "./components/lib/constants";
 import { useCsrfStore } from "./store/csrfStore";
+import { getCSRFToken } from "./service/CSRFService";
 
 /*
 ========================================
@@ -140,6 +141,8 @@ export default function App() {
             setUser(data.user);
             setIsAuthed(true);
             setHasSession(true); // optional (can keep)
+            const csrfToken = await getCSRFToken();
+            useCsrfStore.getState().setCsrfToken(csrfToken);
             return;
           }
         }
