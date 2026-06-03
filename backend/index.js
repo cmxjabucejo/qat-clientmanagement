@@ -15,6 +15,8 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
+dotenv.config();
+
 const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   getSecret: () => process.env.SESSION_SECRET,
   // required in csrf-csrf v4
@@ -29,8 +31,6 @@ const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   size: 64,
   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
 });
-
-dotenv.config();
 
 /*
 ========================================
