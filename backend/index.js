@@ -142,6 +142,15 @@ const PORT = process.env.SERVER_PORT || 5005;
 
 /*
 ========================================
+🔥 BODY PARSER
+========================================
+*/
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+/*
+========================================
 🔐 SECURITY HEADERS
 ========================================
 */
@@ -219,15 +228,6 @@ app.use(
 
 /*
 ========================================
-🔥 BODY PARSER
-========================================
-*/
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-/*
-========================================
 🔴 REDIS CLIENT
 ========================================
 */
@@ -276,18 +276,6 @@ async function startServer() {
         },
       }),
     );
-     app.get("/api/test123", (req, res) => {
-      res.send("working");
-    });
-    app.get("/api/csrf-token", (req, res) => {
-        try {
-          const csrfToken = generateCsrfToken(req, res);
-          return res.json({ csrfToken });
-        } catch (err) {
-          console.error("🔥 Error inside generateCsrfToken:", err);
-          return res.status(500).json({ error: "Internal token generation error" });
-        }
-      });
 
     /* ========================================
        🔥 RATE LIMITERS DEFINITION
@@ -328,9 +316,13 @@ async function startServer() {
       legacyHeaders: false,
       message: {
         success: false,
-        error: "Too many save or upload attempts. Please try again in a few minutes.",
+        error:
+          "Too many save or upload attempts. Please try again in a few minutes.",
       },
-      keyGenerator: (req) => req.session?.user?.id ? `user:${req.session.user.id}` : `ip:${ipKeyGenerator(req.ip)}`,
+      keyGenerator: (req) =>
+        req.session?.user?.id
+          ? `user:${req.session.user.id}`
+          : `ip:${ipKeyGenerator(req.ip)}`,
     });
 
     /* ========================================
@@ -348,6 +340,20 @@ async function startServer() {
       return generalLimiter(req, res, next);
     });
 
+    app.get("/api/test123", (req, res) => {
+      res.send("working");
+    });
+    app.get("/api/csrf-token", (req, res) => {
+      try {
+        const csrfToken = generateCsrfToken(req, res);
+        return res.json({ csrfToken });
+      } catch (err) {
+        console.error("🔥 Error inside generateCsrfToken:", err);
+        return res
+          .status(500)
+          .json({ error: "Internal token generation error" });
+      }
+    });
     /* ========================================
        📦 PUBLIC /api ROUTES (No CSRF Protection Needed)
        ======================================== */
