@@ -273,13 +273,19 @@ async function startServer() {
         cookie: {
           httpOnly: true,
           secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
+          sameSite: "strict",
           maxAge: 1000 * 60 * 60 * 8,
         },
       }),
     );
 
+    app.get("/api/test123", (req, res) => {
+      res.send("working");
+    });
+    
+   console.log("REGISTERING CSRF ROUTE");
     app.get("/api/csrf-token", (req, res) => {
+      console.log("inside csrf-token");
       const csrfToken = generateCsrfToken(req, res);
       res.json({ csrfToken });
     });
