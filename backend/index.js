@@ -252,11 +252,9 @@ async function startServer() {
     await redisClient.connect();
     console.log("✅ Redis connected");
 
-    /*
-    ========================================
-    🧠 SESSION
-    ========================================
-    */
+    /* ========================================
+       🧠 SESSION STORE & MIDDLEWARE (Must be first!)
+       ======================================== */
     const redisStore = new SessionStore({
       client: redisClient,
       prefix: "cmx:",
@@ -279,22 +277,9 @@ async function startServer() {
       }),
     );
 
-    app.get("/api/test123", (req, res) => {
-      res.send("working");
-    });
-    
-   console.log("REGISTERING CSRF ROUTE");
-    app.get("/api/csrf-token", (req, res) => {
-      console.log("inside csrf-token");
-      const csrfToken = generateCsrfToken(req, res);
-      res.json({ csrfToken });
-    });
-
-    /*
-    ========================================
-    🔥 RATE LIMITERS
-    ========================================
-    */
+    /* ========================================
+       🔥 RATE LIMITERS DEFINITION
+       ======================================== */
     const otpLimiter = rateLimit({
       store: new RateLimitRedisStore({
         sendCommand: (...args) => redisClient.sendCommand(args),
@@ -331,63 +316,63 @@ async function startServer() {
       legacyHeaders: false,
       message: {
         success: false,
-        error:
-          "Too many save or upload attempts. Please try again in a few minutes.",
+        error: "Too many save or upload attempts. Please try again in a few minutes.",
       },
-      keyGenerator: (req) => {
-        if (req.session?.user?.id) {
-          return `user:${req.session.user.id}`;
-        }
-
-        return `ip:${ipKeyGenerator(req.ip)}`;
-      },
+      keyGenerator: (req) => req.session?.user?.id ? `user:${req.session.user.id}` : `ip:${ipKeyGenerator(req.ip)}`,
     });
 
-    /*
-    ========================================
-    📦 ROUTES
-    ========================================
-    */
+    /* ========================================
+       🌐 GLOBAL ROUTE ROUTING & LIMITERS
+       ======================================== */
+    // Apply OTP Limiter strictly to the OTP route
+    app.use("/api/sendOTP", otpLimiter);
+
+    // Apply general/upload limiters to all other /api routes
+    app.use("/api", (req, res, next) => {
+      const contentType = req.headers["content-type"] || "";
+      if (contentType.startsWith("multipart/form-data")) {
+        return uploadLimiter(req, res, next);
+      }
+      return generalLimiter(req, res, next);
+    });
+
+    /* ========================================
+       📦 PUBLIC /api ROUTES (No CSRF Protection Needed)
+       ======================================== */
+    app.get("/api/test123", (req, res) => {
+      res.send("working");
+    });
+    
+    // Moved right here: Now it has Session access AND Rate Limiting applied safely
+    app.get("/api/csrf-token", (req, res) => {
+      const csrfToken = generateCsrfToken(req, res);
+      res.json({ csrfToken });
+    });
+
+    // Load auth API (Login, registration, etc.)
     const authAPI = require("./services/authAPI");
+    app.use("/api", authAPI);
+
+    /* ========================================
+       🔐 PROTECTED /api ROUTES (CSRF Required)
+       ======================================== */
+    app.use(doubleCsrfProtection);
+
     const clientRosterAPI = require("./services/clientRosterAPI");
     const clientEscalationAPI = require("./services/clientEscalationAPI");
     const clientSurveyAPI = require("./services/clientSurveyAPI");
 
-    app.use("/api/sendOTP", otpLimiter);
-
-    app.use("/api", (req, res, next) => {
-      const contentType = req.headers["content-type"] || "";
-
-      // 📦 Multipart upload routes
-      if (contentType.startsWith("multipart/form-data")) {
-        return uploadLimiter(req, res, next);
-      }
-
-      // 🔐 Everything else
-      return generalLimiter(req, res, next);
-    });
-
-    app.use("/api", authAPI);
-
-    app.use(doubleCsrfProtection);
     app.use("/api", clientRosterAPI);
     app.use("/api", clientEscalationAPI);
     app.use("/api", clientSurveyAPI);
 
-    /*
-    ========================================
-    ❤️ HEALTH CHECK
-    ========================================
-    */
+    /* ========================================
+       ❤️ HEALTH CHECK & START
+       ======================================== */
     app.get("/", (req, res) => {
       res.send("CMX API running 🚀");
     });
 
-    /*
-    ========================================
-    🚀 START
-    ========================================
-    */
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
