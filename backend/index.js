@@ -8,7 +8,7 @@ const { createClient } = require("redis");
 const { RedisStore: SessionStore } = require("connect-redis");
 const { RedisStore: RateLimitRedisStore } = require("rate-limit-redis");
 
-const { doubleCsrf } = require("csrf-csrf");
+// const { doubleCsrf } = require("csrf-csrf");
 const cookieParser = require("cookie-parser");
 
 // 🔐 SECURITY
@@ -17,21 +17,21 @@ const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
 
 dotenv.config();
 
-const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
-  getSecret: () => process.env.SESSION_SECRET,
-  // required in csrf-csrf v4
-  getSessionIdentifier: (req) => req.sessionID,
-  cookieName: "__Host-csrf-token",
-  trustProxy: true,
-  cookieOptions: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-  },
-  size: 64,
-  ignoredMethods: ["GET", "HEAD", "OPTIONS"],
-});
+// const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
+//   getSecret: () => process.env.SESSION_SECRET,
+//   // required in csrf-csrf v4
+//   getSessionIdentifier: (req) => req.sessionID,
+//   cookieName: "__Host-csrf-token",
+//   trustProxy: true,
+//   cookieOptions: {
+//     httpOnly: true,
+//     secure: process.env.NODE_ENV === "production",
+//     sameSite: "strict",
+//     path: "/",
+//   },
+//   size: 64,
+//   ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+// });
 
 /*
 ========================================
@@ -341,22 +341,20 @@ async function startServer() {
       return generalLimiter(req, res, next);
     });
 
-    app.get("/api/test123", (req, res) => {
-      res.send("working");
-    });
-    app.get("/api/csrf-token", (req, res) => {
-      try {
-        console.log("Session ID Present:", req.sessionID);
-        console.log("Is Request Secure?", req.secure);
-        const csrfToken = generateCsrfToken(req, res);
-        return res.json({ csrfToken });
-      } catch (err) {
-        console.error("🔥 Error inside generateCsrfToken:", err);
-        return res
-          .status(500)
-          .json({ error: "Internal token generation error" });
-      }
-    });
+    // app.get("/api/csrf-token", (req, res) => {
+    //   try {
+    //     console.log("Session ID Present:", req.sessionID);
+    //     console.log("Is Request Secure?", req.secure);
+    //     const csrfToken = generateCsrfToken(req, res);
+    //     return res.json({ csrfToken });
+    //   } catch (err) {
+    //     console.error("🔥 Error inside generateCsrfToken:", err);
+    //     return res
+    //       .status(500)
+    //       .json({ error: "Internal token generation error" });
+    //   }
+    // });
+
     /* ========================================
        📦 PUBLIC /api ROUTES (No CSRF Protection Needed)
        ======================================== */
@@ -368,7 +366,7 @@ async function startServer() {
     /* ========================================
        🔐 PROTECTED /api ROUTES (CSRF Required)
        ======================================== */
-    app.use(doubleCsrfProtection);
+    // app.use(doubleCsrfProtection);
 
     const clientRosterAPI = require("./services/clientRosterAPI");
     const clientEscalationAPI = require("./services/clientEscalationAPI");

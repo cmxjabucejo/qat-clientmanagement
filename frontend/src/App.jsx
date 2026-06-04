@@ -141,8 +141,8 @@ export default function App() {
             setUser(data.user);
             setIsAuthed(true);
             setHasSession(true); // optional (can keep)
-            const csrfToken = await getCSRFToken();
-            useCsrfStore.getState().setCsrfToken(csrfToken);
+            // const csrfToken = await getCSRFToken();
+            // useCsrfStore.getState().setCsrfToken(csrfToken);
             return;
           }
         }

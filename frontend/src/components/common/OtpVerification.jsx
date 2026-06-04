@@ -140,8 +140,8 @@ const OtpVerification = () => {
         return;
       }
 
-      const csrfToken = await getCSRFToken();
-      useCsrfStore.getState().setCsrfToken(csrfToken);
+      // const csrfToken = await getCSRFToken();
+      // useCsrfStore.getState().setCsrfToken(csrfToken);
       setSuccess("Authentication request verified.");
 
       localStorage.removeItem("pendingChallengeId");
