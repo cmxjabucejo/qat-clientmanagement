@@ -341,22 +341,6 @@ async function startServer() {
       return generalLimiter(req, res, next);
     });
 
-    app.get("/api/test123", (req, res) => {
-      res.send("working");
-    });
-    app.get("/api/csrf-token", (req, res) => {
-      try {
-        console.log("Session ID Present:", req.sessionID);
-        console.log("Is Request Secure?", req.secure);
-        const csrfToken = generateCsrfToken(req, res);
-        return res.json({ csrfToken });
-      } catch (err) {
-        console.error("🔥 Error inside generateCsrfToken:", err);
-        return res
-          .status(500)
-          .json({ error: "Internal token generation error" });
-      }
-    });
     /* ========================================
        📦 PUBLIC /api ROUTES (No CSRF Protection Needed)
        ======================================== */
@@ -394,4 +378,6 @@ async function startServer() {
   }
 }
 
+// 🌟 ADD THIS RIGHT HERE TO MAKE THEM ACCESSIBLE SEAMLESSLY ANYWHERE
+module.exports = { generateCsrfToken, doubleCsrfProtection };
 startServer();

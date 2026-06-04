@@ -4,6 +4,7 @@ const db = require("../config/dbconfig");
 const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const { generateCsrfToken } = require("../index");
 
 // ===============================
 // ⚙️ CONFIG
@@ -679,5 +680,22 @@ router.post("/logout", (req, res) => {
     });
   });
 });
+
+// Put this at the very bottom of your services/authAPI.js file:
+
+// ===============================
+// 🎯 CSRF TOKEN GENERATOR
+// ===============================
+router.get("/csrf-token", (req, res) => {
+  try {
+    const csrfToken = generateCsrfToken(req, res);
+    return res.json({ csrfToken });
+  } catch (err) {
+    console.error("🔥 Error inside generateCsrfToken:", err);
+    return res.status(500).json({ error: "Internal token generation error" });
+  }
+});
+
+module.exports = router;
 
 module.exports = router;
