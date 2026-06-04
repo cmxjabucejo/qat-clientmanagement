@@ -22,6 +22,7 @@ const { generateCsrfToken, doubleCsrfProtection } = doubleCsrf({
   // required in csrf-csrf v4
   getSessionIdentifier: (req) => req.sessionID,
   cookieName: "__Host-csrf-token",
+  trustProxy: true,
   cookieOptions: {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -345,6 +346,8 @@ async function startServer() {
     });
     app.get("/api/csrf-token", (req, res) => {
       try {
+        console.log("Session ID Present:", req.sessionID);
+        console.log("Is Request Secure?", req.secure);
         const csrfToken = generateCsrfToken(req, res);
         return res.json({ csrfToken });
       } catch (err) {
