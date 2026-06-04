@@ -276,6 +276,18 @@ async function startServer() {
         },
       }),
     );
+     app.get("/api/test123", (req, res) => {
+      res.send("working");
+    });
+    app.get("/api/csrf-token", (req, res) => {
+        try {
+          const csrfToken = generateCsrfToken(req, res);
+          return res.json({ csrfToken });
+        } catch (err) {
+          console.error("🔥 Error inside generateCsrfToken:", err);
+          return res.status(500).json({ error: "Internal token generation error" });
+        }
+      });
 
     /* ========================================
        🔥 RATE LIMITERS DEFINITION
@@ -339,15 +351,6 @@ async function startServer() {
     /* ========================================
        📦 PUBLIC /api ROUTES (No CSRF Protection Needed)
        ======================================== */
-    app.get("/api/test123", (req, res) => {
-      res.send("working");
-    });
-    
-    // Moved right here: Now it has Session access AND Rate Limiting applied safely
-    app.get("/api/csrf-token", (req, res) => {
-      const csrfToken = generateCsrfToken(req, res);
-      res.json({ csrfToken });
-    });
 
     // Load auth API (Login, registration, etc.)
     const authAPI = require("./services/authAPI");
