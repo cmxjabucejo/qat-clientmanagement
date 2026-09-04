@@ -9,6 +9,8 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const ESCALATION_BUCKET = BUCKET_NAME;
 
+const adminAccess = [requireAuth, requireRole("Admin", "Super Admin")];
+
 /*
 ========================================
 🔐 MULTER (HARDENED)
@@ -107,7 +109,7 @@ function parseAttachmentList(value) {
 📊 MAX ESCALATION ID
 ========================================
 */
-router.get("/escalMaxId", requireAuth, async (req, res) => {
+router.get("/escalMaxId", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.query(
       "SELECT MAX(ID) as escalmaxID FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations",
@@ -129,7 +131,7 @@ router.get("/escalMaxId", requireAuth, async (req, res) => {
 👤 OIC LIST
 ========================================
 */
-router.get("/oicList", requireAuth, async (req, res) => {
+router.get("/oicList", ...adminAccess, async (req, res) => {
   try {
     const [rows] = await db.query(
       "SELECT * FROM 1000_cmx_appdata_client_database.db_cmx_oiclist",
@@ -212,7 +214,7 @@ Authenticated users may add escalations
 */
 router.post(
   "/add-escalation",
-  requireAuth,
+  ...adminAccess,
   upload.array("files", 3),
   async (req, res) => {
     try {
@@ -536,12 +538,7 @@ router.get("/get-file", requireAuth, async (req, res) => {
 
     if (userIsAdmin) {
       const [result] = await db.query(
-        `
-        SELECT ESCALATIONID
-        FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations
-        WHERE JSON_CONTAINS(ATTACHMENT, JSON_QUOTE(?))
-        LIMIT 1
-        `,
+        `SELECT ESCALATIONID FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations WHERE ATTACHMENT LIKE CONCAT('%', ?, '%') LIMIT 1;`,
         [key],
       );
 
@@ -555,13 +552,7 @@ router.get("/get-file", requireAuth, async (req, res) => {
       }
 
       const [result] = await db.query(
-        `
-        SELECT ESCALATIONID
-        FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations
-        WHERE JSON_CONTAINS(ATTACHMENT, JSON_QUOTE(?))
-          AND LOWER(TRIM(OIC_EMAIL)) = ?
-        LIMIT 1
-        `,
+        `SELECT ESCALATIONID FROM 1000_cmx_appdata_client_database.db_cmx_client_escalations WHERE ATTACHMENT LIKE CONCAT('%', ?, '%') AND LOWER(TRIM(OIC_EMAIL)) = ? LIMIT 1`,
         [key, userEmail],
       );
 

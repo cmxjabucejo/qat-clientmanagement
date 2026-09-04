@@ -65,6 +65,45 @@ const UpdateEscalationModal = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    const extractAttachmentKeys = (value) => {
+      const results = [];
+
+      const walk = (item) => {
+        if (!item) return;
+
+        if (typeof item === "string") {
+          // Found actual S3 key
+          if (item.startsWith("uploads/")) {
+            results.push(item);
+            return;
+          }
+
+          // Try to parse nested JSON strings
+          try {
+            walk(JSON.parse(item));
+          } catch {
+            return;
+          }
+        }
+
+        if (Array.isArray(item)) {
+          item.forEach(walk);
+        }
+
+        if (typeof item === "object" && item !== null) {
+          Object.values(item).forEach(walk);
+        }
+      };
+
+      try {
+        walk(JSON.parse(value || "[]"));
+      } catch {
+        walk(value);
+      }
+
+      return [...new Set(results)];
+    };
+
     const loadSessionUser = async () => {
       try {
         const res = await api.get(`${SERVER_URL}/api/session`, {
@@ -109,12 +148,9 @@ const UpdateEscalationModal = ({
       attachment: escalationData.ATTACHMENT,
     });
 
-    try {
-      const parsed = JSON.parse(escalationData.ATTACHMENT || "[]");
-      setAttachments(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setAttachments([]);
-    }
+    const cleanAttachments = extractAttachmentKeys(escalationData.ATTACHMENT);
+
+    setAttachments(cleanAttachments);
 
     setAttachmentUrl(escalationData.attachmentUrl || "");
   }, [isOpen, escalationData]);
@@ -180,6 +216,41 @@ const UpdateEscalationModal = ({
 
     setError("");
     return true;
+  };
+
+  const extractAttachmentKeys = (value) => {
+    const results = [];
+
+    const walk = (item) => {
+      if (!item) return;
+
+      if (typeof item === "string") {
+        if (item.startsWith("uploads/")) {
+          results.push(item);
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(item);
+          walk(parsed);
+        } catch {
+          return;
+        }
+      }
+
+      if (Array.isArray(item)) {
+        item.forEach(walk);
+      }
+    };
+
+    try {
+      const parsed = JSON.parse(value || "[]");
+      walk(parsed);
+    } catch {
+      walk(value);
+    }
+
+    return [...new Set(results)];
   };
 
   const handleSubmit = async (e) => {

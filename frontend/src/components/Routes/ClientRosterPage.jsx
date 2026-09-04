@@ -124,6 +124,8 @@ const ClientRosterPage = ({ user }) => {
     "Onboarding",
     "Pre-Sale",
     "On Hold",
+    "Cancelled",
+    "Declined",
     "Discontinued",
     "Prospect Client",
   ];

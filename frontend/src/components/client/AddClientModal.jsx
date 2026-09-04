@@ -470,6 +470,7 @@ const AddClientModal = ({ isOpen, onClose, onSave, user }) => {
                 {[
                   "CANADA",
                   "UNITED KINGDOM",
+                  "IRELAND",
                   "AL",
                   "AK",
                   "AZ",

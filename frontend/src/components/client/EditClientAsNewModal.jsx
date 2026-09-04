@@ -632,6 +632,7 @@ const EditClientAsNewModal = ({ isOpen, onClose, onSave, client, user }) => {
                   {[
                     "CANADA",
                     "UNITED KINGDOM",
+                    "IRELAND",
                     "AL",
                     "AK",
                     "AZ",
