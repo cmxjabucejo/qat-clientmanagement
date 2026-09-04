@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import cmxLogo from "../../assets/callmax_cover_removebg.png";
 import { SERVER_URL } from "../lib/constants";
+import { apiFetch } from "../lib/apiFetch";
 import { useCsrfStore } from "../../store/csrfStore";
+import AuthenticatorModal from "./AuthenticatorModal";
 
 const ClientSuiteHeader = ({ user }) => {
   const location = useLocation();
@@ -10,6 +12,9 @@ const ClientSuiteHeader = ({ user }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef();
   const { csrfToken } = useCsrfStore();
+  const [isAuthenticatorModalOpen, setIsAuthenticatorModalOpen] =
+    useState(false);
+  const [authenticatorSetupData, setAuthenticatorSetupData] = useState(null);
 
   // ===============================
   // 🧠 USER DATA (SAFE FALLBACK)
@@ -50,6 +55,43 @@ const ClientSuiteHeader = ({ user }) => {
     // 🔥 Force clean state + redirect
     navigate("/OauthLogin", { replace: true });
     window.location.reload(); // ensures session reset
+  };
+
+  const handleStartAuthenticatorSetup = async () => {
+    const response = await apiFetch(`${SERVER_URL}/api/mfa/setup`, {
+      method: "GET",
+    });
+    const data = response && (await response.json());
+
+    if (!response?.ok || !data?.success) {
+      throw new Error(data?.message || "Unable to start Authenticator setup.");
+    }
+
+    setAuthenticatorSetupData(data);
+  };
+
+  const handleVerifyAuthenticator = async (token) => {
+    const response = await apiFetch(`${SERVER_URL}/api/mfa/verify`, {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    });
+    const data = response && (await response.json());
+
+    if (!response?.ok || !data?.success) {
+      throw new Error(data?.message || "Unable to verify Authenticator code.");
+    }
+  };
+
+  const handleSaveMfaPreference = async (method) => {
+    const response = await apiFetch(`${SERVER_URL}/api/mfa/preference`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
+    });
+    const data = response && (await response.json());
+
+    if (!response?.ok || !data?.success) {
+      throw new Error(data?.message || "Unable to save sign-in preference.");
+    }
   };
 
   // ===============================
@@ -112,7 +154,13 @@ const ClientSuiteHeader = ({ user }) => {
 
           {/* DROPDOWN MENU */}
           {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-40 bg-white text-gray-700 text-sm rounded-md shadow-lg z-50 overflow-hidden border border-gray-200">
+            <div className="absolute right-0 mt-2 w-50 bg-white text-gray-700 text-sm rounded-md shadow-lg z-50 overflow-hidden border border-gray-200">
+              <button
+                onClick={() => setIsAuthenticatorModalOpen(true)}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 transition"
+              >
+                Set up Authenticator
+              </button>
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-4 py-2 hover:bg-gray-100 transition"
@@ -165,6 +213,19 @@ const ClientSuiteHeader = ({ user }) => {
           )}
         </div>
       </nav>
+
+      <AuthenticatorModal
+        isOpen={isAuthenticatorModalOpen}
+        onClose={() => {
+          setIsAuthenticatorModalOpen(false);
+          setAuthenticatorSetupData(null);
+        }}
+        userEmail={email}
+        setupData={authenticatorSetupData}
+        onStartSetup={handleStartAuthenticatorSetup}
+        onVerifySetup={handleVerifyAuthenticator}
+        onSavePreference={handleSaveMfaPreference}
+      />
     </header>
   );
 };

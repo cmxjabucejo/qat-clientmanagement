@@ -6,6 +6,7 @@ import ClientRoster from "./components/Routes/ClientRosterPage";
 import ClientEscalations from "./components/Routes/ClientEscalationsPage";
 import VOCS from "./components/Routes/VOCS";
 import OtpVerification from "./components/common/OtpVerification";
+import MfaLoginVerification from "./components/common/MfaLoginVerification";
 
 import SessionExpiredModal from "./components/common/SessionExpiredModal";
 import SessionWarningModal from "./components/common/SessionWarningModal";
@@ -120,7 +121,13 @@ export default function App() {
   ========================================
   */
   useEffect(() => {
-    const publicPaths = ["/", "/OauthLogin", "/Register", "/OTP-SECURE"];
+    const publicPaths = [
+      "/",
+      "/OauthLogin",
+      "/Register",
+      "/OTP-SECURE",
+      "/MFA-SECURE",
+    ];
     const isPublicPath = publicPaths.includes(location.pathname);
 
     const checkSession = async () => {
@@ -234,6 +241,7 @@ export default function App() {
         />
 
         <Route path="/OTP-SECURE" element={<OtpVerification />} />
+        <Route path="/MFA-SECURE" element={<MfaLoginVerification />} />
 
         {/* PROTECTED */}
         <Route element={<RequireAuth isAuthed={isAuthed} />}>

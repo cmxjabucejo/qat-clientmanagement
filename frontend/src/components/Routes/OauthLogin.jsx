@@ -13,6 +13,7 @@ const OauthLogin = () => {
   const [email, setEmail] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [dots, setDots] = useState("");
+  const [loginMethod, setLoginMethod] = useState("otp");
 
   useEffect(() => {
     if (!isSending) {
@@ -35,7 +36,7 @@ const OauthLogin = () => {
     return trimmed.endsWith("@callmaxsolutions.com");
   };
 
-  const handleManualOtpLogin = async () => {
+  const handleLogin = async () => {
     setError("");
 
     if (!email) {
@@ -51,6 +52,28 @@ const OauthLogin = () => {
     setIsSending(true);
 
     try {
+      if (loginMethod === "authenticator") {
+        const mfaRes = await apiFetch(`${SERVER_URL}/api/mfa/login/start`, {
+          method: "POST",
+          body: JSON.stringify({ emailAddress: email }),
+        });
+        const result = mfaRes && (await mfaRes.json());
+
+        if (!mfaRes?.ok || !result?.success) {
+          setError(
+            result?.code === "MFA_NOT_CONFIGURED"
+              ? result.message
+              : GENERIC_AUTH_MESSAGE,
+          );
+          return;
+        }
+
+        navigate("/MFA-SECURE", {
+          state: { emailAddress: email },
+        });
+        return;
+      }
+
       // ===============================
       // SEND OTP ONLY
       // Do not expose check-email result in frontend
@@ -73,7 +96,12 @@ const OauthLogin = () => {
 
       const result = await otpRes.json();
 
-      if (!otpRes.ok || !result.success || !result.challengeId || !result.expiresAt) {
+      if (
+        !otpRes.ok ||
+        !result.success ||
+        !result.challengeId ||
+        !result.expiresAt
+      ) {
         setError(GENERIC_AUTH_MESSAGE);
         return;
       }
@@ -89,12 +117,12 @@ const OauthLogin = () => {
         },
       });
     } catch (err) {
-      console.error("OTP login error:", err);
+      console.error("Login error:", err);
       setError(GENERIC_AUTH_MESSAGE);
     } finally {
       setIsSending(false);
     }
-  };  
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-[#061326]">
@@ -105,21 +133,16 @@ const OauthLogin = () => {
 
       <div className="relative w-full max-w-md">
         <div className="bg-white/10 border border-white/20 rounded-xl shadow px-10 py-7 text-white backdrop-blur-lg">
-
           <div className="flex flex-col items-center mb-6">
             <img src={logo} alt="Callmax Logo" className="w-60 mb-3" />
             <h2 className="text-xl font-semibold text-gray-300">
               Client Management Suite
             </h2>
-            <p className="text-xs text-gray-200 mt-1">
-              Version {APP_VERSION}
-            </p>
+            <p className="text-xs text-gray-200 mt-1">Version {APP_VERSION}</p>
           </div>
 
           <div className="mb-4">
-            <label className="text-xs text-gray-300 mb-1 block">
-              Email
-            </label>
+            <label className="text-xs text-gray-300 mb-1 block">Email</label>
 
             <input
               type="email"
@@ -130,14 +153,39 @@ const OauthLogin = () => {
                 if (error) setError("");
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleManualOtpLogin();
+                if (e.key === "Enter") handleLogin();
               }}
-              className="text-black w-full border rounded-lg px-3 py-2 text-sm text-center" 
+              className="text-black w-full border rounded-lg px-3 py-2 text-sm text-center"
             />
           </div>
 
+          <div
+            className="mb-4 grid grid-cols-2 gap-2 rounded-lg bg-black/20 p-1"
+            role="radiogroup"
+            aria-label="Login method"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={loginMethod === "otp"}
+              onClick={() => setLoginMethod("otp")}
+              className={`rounded-md px-3 py-2 text-xs font-semibold transition ${loginMethod === "otp" ? "bg-white text-[#003b5c]" : "text-white/75 hover:text-white"}`}
+            >
+              Email OTP
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={loginMethod === "authenticator"}
+              onClick={() => setLoginMethod("authenticator")}
+              className={`rounded-md px-3 py-2 text-xs font-semibold transition ${loginMethod === "authenticator" ? "bg-white text-[#003b5c]" : "text-white/75 hover:text-white"}`}
+            >
+              Authenticator
+            </button>
+          </div>
+
           <button
-            onClick={handleManualOtpLogin}
+            onClick={handleLogin}
             disabled={isSending}
             className={`w-full py-2 text-sm rounded text-white transition-all duration-200 ${
               isSending
@@ -146,12 +194,16 @@ const OauthLogin = () => {
             }`}
           >
             {isSending
-              ? `Sending OTP via Secure Channel${dots}`
-              : "Request OTP"}
+              ? loginMethod === "otp"
+                ? `Sending OTP via Secure Channel${dots}`
+                : "Starting Authenticator sign-in..."
+              : loginMethod === "otp"
+                ? "Request OTP"
+                : "Sign in with Authenticator"}
           </button>
 
           {error && (
-            <p className="text-red-500 text-xs mt-3 text-center bg-white p-1">
+            <p className="mt-3 text-center text-xs font-medium text-red-300">
               {error}
             </p>
           )}

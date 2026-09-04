@@ -14,6 +14,7 @@ const cookieParser = require("cookie-parser");
 // 🔐 SECURITY
 const helmet = require("helmet");
 const { rateLimit, ipKeyGenerator } = require("express-rate-limit");
+const { initializeMfaTable, router: mfaAPI } = require("./services/mfaAPI");
 
 dotenv.config();
 
@@ -252,6 +253,8 @@ async function startServer() {
   try {
     await redisClient.connect();
     console.log("✅ Redis connected");
+    await initializeMfaTable();
+    console.log("✅ MFA table ready");
 
     /* ========================================
        🧠 SESSION STORE & MIDDLEWARE (Must be first!)
@@ -362,6 +365,7 @@ async function startServer() {
     // Load auth API (Login, registration, etc.)
     const authAPI = require("./services/authAPI");
     app.use("/api", authAPI);
+    app.use("/api", mfaAPI);
 
     /* ========================================
        🔐 PROTECTED /api ROUTES (CSRF Required)
